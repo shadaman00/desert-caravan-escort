@@ -919,7 +919,7 @@ describe('M4: Hazards, Bosses & Emergency Recovery Suite', () => {
       drawBoss(strictCtx, groggySnap, groggySnap.targetId, 1.5);
       const lockedRingCall = arcMock.mock.calls
         .slice(prevArcCalls)
-        .find((c) => c[2] === 10);
+        .find((c: unknown[]) => c[2] === 10);
       expect(lockedRingCall !== undefined).toBe(true);
       expect(lockedRingCall![0]).toBe(groggySnap.x + groggySnap.weakPointOffset.x);
       expect(lockedRingCall![1]).toBe(groggySnap.y + 18 + groggySnap.weakPointOffset.y);
