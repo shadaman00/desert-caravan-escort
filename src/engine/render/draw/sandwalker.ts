@@ -1,7 +1,7 @@
 import type { SkinId, TurretType } from '@/store/types';
 
-export const WALKER_ANCHOR_X = 196;
-export const WALKER_GROUND_Y = 412;
+export const WALKER_ANCHOR_X = 240;
+export const WALKER_GROUND_Y = 336;
 export const LEG_UPPER_LEN = 28;
 export const LEG_LOWER_LEN = 32;
 export const STRIDE_GROUND_TRAVEL = 48;

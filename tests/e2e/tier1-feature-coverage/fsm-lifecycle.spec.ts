@@ -35,8 +35,8 @@ import {
   createBossSeedForAct,
 } from '../fixtures/mockStorage';
 
-const R_SKY = { x0: 20, y0: 15, x1: 220, y1: 115 } as const;
-const R_FG_SCROLL = { x: 20, y: 428, width: 390, height: 58 } as const;
+const R_SKY = { x0: 20, y0: 12, x1: 300, y1: 86 } as const;
+const R_FG_SCROLL = { x: 20, y: 348, width: 640, height: 56 } as const;
 
 test.describe('Tier 1: Feature 5 — 7-State Game FSM Lifecycle', () => {
   test('TC-FSM-01: Fresh boot without sandwalkerIntroSeen enters OPENING_HOOK with skip button hidden', async ({

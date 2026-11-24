@@ -152,8 +152,8 @@ export class CameraSystem {
 
   public renderOverlays(
     ctx: CanvasRenderingContext2D,
-    width = 430,
-    height = 512
+    width = 680,
+    height = 412
   ): void {
     // Sandstorm 50% dark vision radial mask (central 50% clear radius)
     if (this.sandstormMaskAlpha > 0.005) {

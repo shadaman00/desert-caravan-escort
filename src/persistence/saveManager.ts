@@ -77,6 +77,41 @@ export class SaveManager {
     }
   }
 
+  private static buildSaveEnvelope(targetState?: GameStoreState): SaveEnvelope {
+    const currentState = targetState ?? useGameStore.getState();
+
+    // Clone state and apply Decision D7: reset routeProgress to 0
+    const serializedState: GameStoreState = {
+      ...currentState,
+      meta: {
+        ...currentState.meta,
+        routeProgress: 0.0,
+        hazardConsumed: false,
+        lastSavedTimestamp: Date.now(),
+      },
+      sandwalker: {
+        ...currentState.sandwalker,
+        manualAimTargetId: null,
+        turretLevels: currentState.meta.isIntroCompleted
+          ? currentState.sandwalker.turretLevels
+          : { HEAT_RAY: 1, HARPOON: 1, MORTAR: 1 },
+        turretTiers: currentState.meta.isIntroCompleted
+          ? currentState.sandwalker.turretTiers
+          : { HEAT_RAY: 1, HARPOON: 1, MORTAR: 1 },
+      },
+      mercenaries: currentState.mercenaries.map((m) => ({
+        ...m,
+        skillCooldown: 0,
+      })),
+    };
+
+    return {
+      v: CURRENT_SAVE_VERSION,
+      savedAt: Date.now(),
+      state: serializedState,
+    };
+  }
+
   /**
    * Serializes store state and writes to LocalStorage.
    * Mid-route save policy (Decision D7): resets routeProgress to 0 in save data
@@ -87,39 +122,7 @@ export class SaveManager {
     if (!storage) return false;
 
     try {
-      const currentState = targetState ?? useGameStore.getState();
-
-      // Clone state and apply Decision D7: reset routeProgress to 0
-      const serializedState: GameStoreState = {
-        ...currentState,
-        meta: {
-          ...currentState.meta,
-          routeProgress: 0.0,
-          hazardConsumed: false,
-          lastSavedTimestamp: Date.now(),
-        },
-        sandwalker: {
-          ...currentState.sandwalker,
-          manualAimTargetId: null,
-          turretLevels: currentState.meta.isIntroCompleted
-            ? currentState.sandwalker.turretLevels
-            : { HEAT_RAY: 1, HARPOON: 1, MORTAR: 1 },
-          turretTiers: currentState.meta.isIntroCompleted
-            ? currentState.sandwalker.turretTiers
-            : { HEAT_RAY: 1, HARPOON: 1, MORTAR: 1 },
-        },
-        mercenaries: currentState.mercenaries.map((m) => ({
-          ...m,
-          skillCooldown: 0,
-        })),
-      };
-
-      const envelope: SaveEnvelope = {
-        v: CURRENT_SAVE_VERSION,
-        savedAt: Date.now(),
-        state: serializedState,
-      };
-
+      const envelope = SaveManager.buildSaveEnvelope(targetState);
       const jsonStr = JSON.stringify(envelope);
 
       // Save to primary storage
@@ -133,6 +136,64 @@ export class SaveManager {
       console.error('[SaveManager] Failed to save state:', err);
       return false;
     }
+  }
+
+  /**
+   * Exports current save envelope as formatted JSON text (no blob URLs created).
+   */
+  public static exportSaveJson(targetState?: GameStoreState): string {
+    return JSON.stringify(SaveManager.buildSaveEnvelope(targetState), null, 2);
+  }
+
+  /**
+   * Validates and imports a save JSON string without mutating state on error.
+   */
+  public static importSaveJson(rawJson: string): {
+    success: boolean;
+    error?: string;
+    state?: GameStoreState;
+  } {
+    if (typeof rawJson !== 'string' || rawJson.trim().length === 0) {
+      return { success: false, error: '세이브 JSON 텍스트를 입력해 주세요.' };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawJson);
+    } catch {
+      return { success: false, error: '올바른 세이브 JSON 형식이 아닙니다.' };
+    }
+
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed) ||
+      typeof (parsed as { state?: unknown }).state !== 'object' ||
+      (parsed as { state?: unknown }).state === null ||
+      Array.isArray((parsed as { state?: unknown }).state)
+    ) {
+      return { success: false, error: '세이브 구조(state)가 유효하지 않습니다.' };
+    }
+
+    const migrationResult = migrate(parsed);
+    if (!migrationResult.success) {
+      return { success: false, error: '세이브 마이그레이션 검증에 실패했습니다.' };
+    }
+
+    const storage = getStorage();
+    const jsonStr = JSON.stringify(SaveManager.buildSaveEnvelope(migrationResult.state));
+    if (storage) {
+      storage.setItem(SAVE_STORAGE_KEY, jsonStr);
+      storage.setItem(SAVE_BACKUP_KEY, jsonStr);
+    }
+
+    try {
+      useGameStore.getState().replaceState(migrationResult.state);
+    } catch {
+      // Store might not be mounted in isolated unit context
+    }
+
+    return { success: true, state: migrationResult.state };
   }
 
   /**

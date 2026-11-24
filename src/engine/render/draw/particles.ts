@@ -139,30 +139,27 @@ export class ParticlePool {
       ctx.globalAlpha = p.alpha;
       ctx.fillStyle = p.color;
 
+      const px = Math.round(p.x / 2) * 2;
+      const py = Math.round(p.y / 2) * 2;
+      const dot = Math.max(2, Math.round(radius / 2) * 2);
+
       switch (p.kind) {
         case 'SAND_DUST': {
-          if (radius <= 2) {
-            ctx.fillRect(p.x - radius * 0.5, p.y - radius * 0.5, radius, radius);
-          } else {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-            ctx.fill();
-          }
+          ctx.fillRect(px, py, dot, dot);
           break;
         }
         case 'SPARK': {
-          ctx.fillRect(p.x - radius, p.y - 0.8, radius * 2.2, 1.6);
+          ctx.fillRect(px - dot, py, dot * 2, 2);
           break;
         }
         case 'HEAT_HAZE': {
-          const shimmerX = p.x + Math.sin(p.age * 8 + p.phase) * 3;
-          ctx.beginPath();
-          ctx.ellipse(shimmerX, p.y, radius * 2.4, radius * 0.65, 0, 0, Math.PI * 2);
-          ctx.fill();
+          const shimmerX = Math.round((p.x + Math.sin(p.age * 8 + p.phase) * 3) / 2) * 2;
+          ctx.fillRect(shimmerX - dot * 2, py, dot * 4, 2);
           break;
         }
         case 'SAND_STREAK': {
-          ctx.fillRect(p.x, p.y, Math.max(4, radius * 3.5), 1.3);
+          const w = Math.max(6, Math.round((radius * 3.5) / 2) * 2);
+          ctx.fillRect(px, py, w, 2);
           break;
         }
       }
@@ -243,8 +240,8 @@ export function emitAmbientWind(
   dt: number,
   isStorm: boolean,
   timeOfDay: TimeOfDay,
-  viewportWidth = 430,
-  groundY = 412,
+  viewportWidth = 680,
+  groundY = 336,
   rng: () => number = Math.random
 ): number {
   if (!Number.isFinite(dt) || dt <= 0) return 0;
@@ -261,7 +258,7 @@ export function emitAmbientWind(
       const ok = pool.spawn({
         kind: 'SAND_STREAK',
         x: viewportWidth + 10,
-        y: 120 + rng() * (groundY - 90),
+        y: 90 + rng() * (groundY - 70),
         vx: -(isStorm ? 260 : 145) - rng() * 90,
         vy: 8 + rng() * 18,
         gravity: 0,

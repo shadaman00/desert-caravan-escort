@@ -1,8 +1,9 @@
 import type { AtmosphericPalette } from '../palette';
+import { fillBayerDitherRect } from '../pixel/PixelCanvas';
 
-export const ZONE_B_WIDTH = 430;
-export const ZONE_B_HEIGHT = 512;
-export const PARALLAX_TILE_WIDTH = 860;
+export const ZONE_B_WIDTH = 680;
+export const ZONE_B_HEIGHT = 412;
+export const PARALLAX_TILE_WIDTH = 1360;
 export const PARALLAX_FACTORS = [0.1, 0.3, 0.6, 1.0] as const;
 
 export interface DesertLayerSpec {
@@ -13,10 +14,10 @@ export interface DesertLayerSpec {
 }
 
 export const DESERT_LAYER_SPECS: readonly DesertLayerSpec[] = [
-  { index: 0, factor: 0.1, y: 170, height: 215 },
-  { index: 1, factor: 0.3, y: 225, height: 165 },
-  { index: 2, factor: 0.6, y: 275, height: 120 },
-  { index: 3, factor: 1.0, y: 375, height: 137 },
+  { index: 0, factor: 0.1, y: 120, height: 185 },
+  { index: 1, factor: 0.3, y: 165, height: 145 },
+  { index: 2, factor: 0.6, y: 215, height: 105 },
+  { index: 3, factor: 1.0, y: 300, height: 112 },
 ] as const;
 
 export interface PeriodicHarmonic {
@@ -41,27 +42,27 @@ export function periodicWave(
 }
 
 const NIGHT_STARS: readonly { x: number; y: number; r: number; a: number }[] = [
-  { x: 34, y: 24, r: 1.1, a: 0.8 },
-  { x: 78, y: 52, r: 0.9, a: 0.65 },
-  { x: 112, y: 18, r: 1.3, a: 0.9 },
-  { x: 156, y: 68, r: 0.8, a: 0.6 },
-  { x: 192, y: 34, r: 1.2, a: 0.75 },
-  { x: 224, y: 92, r: 1.0, a: 0.55 },
-  { x: 262, y: 22, r: 1.4, a: 0.85 },
-  { x: 288, y: 58, r: 0.9, a: 0.7 },
-  { x: 356, y: 30, r: 1.1, a: 0.75 },
-  { x: 394, y: 46, r: 1.3, a: 0.9 },
-  { x: 412, y: 112, r: 0.9, a: 0.5 },
-  { x: 52, y: 118, r: 1.0, a: 0.55 },
-  { x: 145, y: 142, r: 0.8, a: 0.45 },
-  { x: 244, y: 148, r: 1.1, a: 0.5 },
+  { x: 42, y: 20, r: 1.1, a: 0.8 },
+  { x: 96, y: 44, r: 0.9, a: 0.65 },
+  { x: 148, y: 16, r: 1.3, a: 0.9 },
+  { x: 205, y: 58, r: 0.8, a: 0.6 },
+  { x: 256, y: 28, r: 1.2, a: 0.75 },
+  { x: 304, y: 74, r: 1.0, a: 0.55 },
+  { x: 358, y: 18, r: 1.4, a: 0.85 },
+  { x: 408, y: 50, r: 0.9, a: 0.7 },
+  { x: 462, y: 24, r: 1.1, a: 0.75 },
+  { x: 518, y: 38, r: 1.3, a: 0.9 },
+  { x: 594, y: 82, r: 0.9, a: 0.5 },
+  { x: 642, y: 32, r: 1.0, a: 0.65 },
+  { x: 84, y: 92, r: 0.9, a: 0.5 },
+  { x: 382, y: 98, r: 1.1, a: 0.5 },
 ];
 
 export function drawSkyBackdrop(
   ctx: CanvasRenderingContext2D,
   palette: AtmosphericPalette,
   width = ZONE_B_WIDTH,
-  groundY = 380
+  groundY = 308
 ): void {
   ctx.save();
 
@@ -77,6 +78,9 @@ export function drawSkyBackdrop(
     for (let i = 0; i < NIGHT_STARS.length; i++) {
       const s = NIGHT_STARS[i];
       ctx.globalAlpha = s.a * palette.starsAlpha * palette.celestialAlpha;
+      const sx = Math.round(s.x / 2) * 2;
+      const sy = Math.round(s.y / 2) * 2;
+      ctx.fillRect(sx, sy, 2, 2);
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
       ctx.fill();
@@ -84,30 +88,34 @@ export function drawSkyBackdrop(
   }
 
   // Celestial body (Sun or Moon)
-  const cx = 330;
-  const cy = 82;
-  const glowGrad = ctx.createRadialGradient(cx, cy, 8, cx, cy, 56);
+  const cx = 540;
+  const cy = 62;
+  const glowGrad = ctx.createRadialGradient(cx, cy, 8, cx, cy, 52);
   glowGrad.addColorStop(0, palette.celestialGlow);
   glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
   ctx.globalAlpha = 0.35 * palette.celestialAlpha;
   ctx.fillStyle = glowGrad;
   ctx.beginPath();
-  ctx.arc(cx, cy, 56, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 52, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.globalAlpha = palette.celestialAlpha;
   ctx.fillStyle = palette.celestialBody;
   ctx.beginPath();
-  ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 22, 0, Math.PI * 2);
   ctx.fill();
 
+  // Retro Bayer 4x4 dithered horizon transition band
+  ctx.globalAlpha = 0.25 + palette.sandHazeAlpha * 0.45;
+  fillBayerDitherRect(ctx, 0, 108, width, 16, palette.skyMid, palette.skyBottom, 0.38, 2);
+
   // Horizon atmospheric haze band
-  const hazeGrad = ctx.createLinearGradient(0, 280, 0, groundY + 10);
+  const hazeGrad = ctx.createLinearGradient(0, 210, 0, groundY + 10);
   hazeGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
   hazeGrad.addColorStop(1, palette.sandHaze);
   ctx.globalAlpha = palette.sandHazeAlpha;
   ctx.fillStyle = hazeGrad;
-  ctx.fillRect(0, 280, width, groundY - 270);
+  ctx.fillRect(0, 210, width, groundY - 200);
 
   ctx.restore();
 }
@@ -202,16 +210,16 @@ export function renderLayer0FarDunes(
   ctx.save();
   ctx.clearRect(0, 0, tileWidth, height);
 
-  // Great pyramids strictly interior to tile bounds for zero seam wrapping
-  drawPyramid(ctx, 130, 38, 62, 160, palette.farDune, palette.farDuneAccent);
-  drawPyramid(ctx, 215, 68, 42, 160, palette.farDune, palette.farDuneAccent);
-  drawPyramid(ctx, 430, 28, 72, 162, palette.farDune, palette.farDuneAccent);
-  drawPyramid(ctx, 710, 52, 54, 160, palette.farDune, palette.farDuneAccent);
+  // Great pyramids strictly interior to 1360px tile bounds for zero seam wrapping
+  drawPyramid(ctx, 180, 26, 68, 132, palette.farDune, palette.farDuneAccent);
+  drawPyramid(ctx, 360, 56, 46, 132, palette.farDune, palette.farDuneAccent);
+  drawPyramid(ctx, 680, 20, 78, 134, palette.farDune, palette.farDuneAccent);
+  drawPyramid(ctx, 1060, 40, 60, 132, palette.farDune, palette.farDuneAccent);
 
-  const duneGrad = ctx.createLinearGradient(0, 95, 0, height);
+  const duneGrad = ctx.createLinearGradient(0, 75, 0, height);
   duneGrad.addColorStop(0, palette.farDune);
   duneGrad.addColorStop(1, palette.farDuneAccent);
-  fillPeriodicSilhouette(ctx, tileWidth, height, 118, FAR_DUNE_HARMONICS, duneGrad);
+  fillPeriodicSilhouette(ctx, tileWidth, height, 98, FAR_DUNE_HARMONICS, duneGrad);
 
   ctx.restore();
 }
@@ -250,21 +258,21 @@ export function renderLayer1MidDunesRuins(
   ctx.save();
   ctx.clearRect(0, 0, tileWidth, height);
 
-  const backGrad = ctx.createLinearGradient(0, 40, 0, height);
+  const backGrad = ctx.createLinearGradient(0, 32, 0, height);
   backGrad.addColorStop(0, palette.midDune);
   backGrad.addColorStop(1, palette.farDuneAccent);
-  fillPeriodicSilhouette(ctx, tileWidth, height, 72, MID_DUNE_BACK_HARMONICS, backGrad);
+  fillPeriodicSilhouette(ctx, tileWidth, height, 58, MID_DUNE_BACK_HARMONICS, backGrad);
 
   // Ancient desert ruins placed clear of tile seam boundaries
-  drawRuinProp(ctx, 105, 86, 'obelisk', palette.midRuins);
-  drawRuinProp(ctx, 315, 84, 'arch', palette.midRuins);
-  drawRuinProp(ctx, 565, 88, 'obelisk', palette.midRuins);
-  drawRuinProp(ctx, 760, 82, 'arch', palette.midRuins);
+  drawRuinProp(ctx, 130, 76, 'obelisk', palette.midRuins);
+  drawRuinProp(ctx, 420, 74, 'arch', palette.midRuins);
+  drawRuinProp(ctx, 790, 78, 'obelisk', palette.midRuins);
+  drawRuinProp(ctx, 1140, 72, 'arch', palette.midRuins);
 
-  const frontGrad = ctx.createLinearGradient(0, 75, 0, height);
+  const frontGrad = ctx.createLinearGradient(0, 62, 0, height);
   frontGrad.addColorStop(0, palette.midDune);
   frontGrad.addColorStop(1, palette.midRuins);
-  fillPeriodicSilhouette(ctx, tileWidth, height, 98, MID_DUNE_FRONT_HARMONICS, frontGrad);
+  fillPeriodicSilhouette(ctx, tileWidth, height, 82, MID_DUNE_FRONT_HARMONICS, frontGrad);
 
   ctx.restore();
 }
@@ -329,7 +337,7 @@ export function renderLayer2NearRidges(
     const sampleX = (kMod * tileWidth) / segments;
     const wave = periodicWave(sampleX, tileWidth, NEAR_RIDGE_HARMONICS);
     const quant = Math.round(wave / 3) * 3;
-    ridgePath.lineTo(x, 62 + quant);
+    ridgePath.lineTo(x, 52 + quant);
   }
   ridgePath.lineTo(tileWidth + step, height);
   ridgePath.closePath();
@@ -337,10 +345,10 @@ export function renderLayer2NearRidges(
   ctx.fill(ridgePath);
 
   // Cacti and sandstone boulders strictly clear of [0, tileWidth] seam
-  const cactiPositions = [72, 215, 370, 505, 655, 792];
+  const cactiPositions = [85, 290, 520, 750, 990, 1240];
   for (let i = 0; i < cactiPositions.length; i++) {
     const cx = cactiPositions[i];
-    const ridgeY = 62 + periodicWave(cx, tileWidth, NEAR_RIDGE_HARMONICS);
+    const ridgeY = 52 + periodicWave(cx, tileWidth, NEAR_RIDGE_HARMONICS);
     drawCactus(ctx, cx, ridgeY + 6, i % 2 === 0 ? 1.0 : 0.85, palette.nearCactus);
     if (i % 2 === 1) {
       drawBoulder(ctx, cx + 22, ridgeY + 12, 18, 11, palette.nearRidge);
@@ -374,7 +382,7 @@ export function renderLayer3ForegroundSand(
   ctx.globalAlpha = 0.45;
   ctx.strokeStyle = palette.fgTrack;
   ctx.lineWidth = 2;
-  const rippleRows = [22, 62, 102];
+  const rippleRows = [18, 50, 84];
   const rippleSegments = Math.max(4, Math.round(tileWidth / 5));
   for (let r = 0; r < rippleRows.length; r++) {
     const ripple = new Path2D();
@@ -390,21 +398,21 @@ export function renderLayer3ForegroundSand(
     ctx.stroke(ripple);
   }
 
-  // Exact integer divisor step (860 / 43 = 20) for zero-seam track & pebble spacing
+  // Exact integer divisor step (1360 / 40 = 34) for zero-seam track & pebble spacing
   ctx.globalAlpha = 0.55;
   ctx.lineWidth = 2.5;
-  const trackStep = 43;
+  const trackStep = 40;
   for (let x = 0; x < tileWidth; x += trackStep) {
     const track = new Path2D();
-    track.moveTo(x + 6, 36);
-    track.lineTo(x + 20, 48);
-    track.moveTo(x + 18, 78);
-    track.lineTo(x + 30, 88);
+    track.moveTo(x + 6, 30);
+    track.lineTo(x + 20, 42);
+    track.moveTo(x + 18, 66);
+    track.lineTo(x + 30, 76);
     ctx.stroke(track);
 
     ctx.fillStyle = palette.fgTrack;
     ctx.beginPath();
-    ctx.arc(x + 32, 54, 1.6, 0, Math.PI * 2);
+    ctx.arc(x + 32, 46, 1.6, 0, Math.PI * 2);
     ctx.fill();
   }
 

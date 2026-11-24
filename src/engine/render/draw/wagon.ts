@@ -37,7 +37,7 @@ export function computeWagonTrain(
   const count = Number.isFinite(input.wagonCount)
     ? Math.max(0, Math.min(MAX_WAGONS, Math.floor(input.wagonCount)))
     : 0;
-  const groundY = input.groundY ?? 412;
+  const groundY = input.groundY ?? 336;
   const speed = Number.isFinite(input.speed) && input.speed > 0 ? input.speed : 0;
   const wheelAngle = travelDistance / WAGON_WHEEL_RADIUS;
   const isMoving = speed > 0.5;
@@ -169,7 +169,7 @@ export function drawWagonTrain(
   ctx: CanvasRenderingContext2D,
   poses: readonly WagonPose[],
   equippedSkinId: SkinId,
-  groundY = 412
+  groundY = 336
 ): void {
   if (poses.length === 0) return;
   const isRoyal = equippedSkinId === 'GOLDEN_PHARAOH';

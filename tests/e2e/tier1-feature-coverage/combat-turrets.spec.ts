@@ -38,7 +38,7 @@ import {
   TurretType,
 } from '../fixtures/mockStorage';
 
-const R_COMBAT_LANE = { x: 190, y: 240, width: 230, height: 185 };
+const R_COMBAT_LANE = { x: 235, y: 180, width: 425, height: 175 };
 
 async function enterAct1Combat(
   page: Page,
@@ -529,7 +529,7 @@ test.describe('Tier 1: Feature 18 — Harpoon Armor Piercing & Knockback', () =>
         async () => {
           const snap = await readDebugSnapshot(gamePage);
           const scorpion = (snap?.combat.enemies ?? []).find(
-            (e) => e.archetypeId === 'SCORPION' && e.hp === e.maxHp && e.x < 440
+            (e) => e.archetypeId === 'SCORPION' && e.hp === e.maxHp && e.x < 665
           );
           if (scorpion) {
             trackedId = scorpion.id;
@@ -947,7 +947,7 @@ test.describe('Tier 1: Feature 20 — Weapon Affinity Engine', () => {
     await switchTurret(gamePage, 'HARPOON');
     await aimAtFirstEnemyWeakPoint(
       gamePage,
-      (e) => e.archetypeId === 'DESERT_BANDIT' && e.x > 240 && e.x < 420
+      (e) => e.archetypeId === 'DESERT_BANDIT' && e.x > 280 && e.x < 660
     ).catch(() => null);
     const harpoonHit = await collectDamageEvent(
       gamePage,
@@ -990,7 +990,7 @@ test.describe('Tier 1: Feature 21 — Manual Weak-Point Drag Aim', () => {
 
     const target = await aimAtFirstEnemyWeakPoint(
       gamePage,
-      (e) => e.x > 250 && e.x < 420 && e.hp >= 18,
+      (e) => e.x > 280 && e.x < 660 && e.hp >= 18,
       { steps: 4, holdMs: 30, release: true }
     );
 
@@ -1092,7 +1092,7 @@ test.describe('Tier 1: Feature 21 — Manual Weak-Point Drag Aim', () => {
     );
     await aimAtFirstEnemyWeakPoint(
       gamePage,
-      (e) => e.archetypeId === 'DESERT_BANDIT' && e.hp >= 12 && e.x < 420,
+      (e) => e.archetypeId === 'DESERT_BANDIT' && e.hp >= 12 && e.x < 665,
       { steps: 6, holdMs: 60, release: true }
     );
 
@@ -1126,7 +1126,7 @@ test.describe('Tier 1: Feature 21 — Manual Weak-Point Drag Aim', () => {
     // Lock onto a low-HP DESERT_BANDIT (30 HP, one-shot by Lv15 Harpoon)
     const target = await aimAtFirstEnemyWeakPoint(
       gamePage,
-      (e) => e.archetypeId === 'DESERT_BANDIT' && e.x > 290 && e.x < 420,
+      (e) => e.archetypeId === 'DESERT_BANDIT' && e.x > 290 && e.x < 665,
       { steps: 6, holdMs: 60, release: true }
     );
 

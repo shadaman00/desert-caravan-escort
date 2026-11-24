@@ -5,13 +5,13 @@ export const BUBBLE_FADE_SEC = 0.3;
 export const BUBBLE_TOTAL_SEC = BUBBLE_HOLD_SEC + BUBBLE_FADE_SEC;
 export const MAX_CONCURRENT_BUBBLES = 2;
 
-// 430x932 viewport shell coordinates: Zone B starts at y = 140
-export const ZONE_B_ORIGIN_Y = 140;
-export const FORBIDDEN_COMBAT_BAND_MIN_Y = 240;
-export const FORBIDDEN_COMBAT_BAND_MAX_Y = 480;
+// 960x540 landscape viewport shell coordinates: Zone B starts at y = 56
+export const ZONE_B_ORIGIN_Y = 56;
+export const FORBIDDEN_COMBAT_BAND_MIN_Y = 165;
+export const FORBIDDEN_COMBAT_BAND_MAX_Y = 400;
 
-// Zone B local Y slots: 6px -> 146px shellY, 50px -> 190px shellY (both strictly <= 240 bottom)
-const ZONE_B_SLOT_Y = [6, 50] as const;
+// Zone B local Y slots: 6px -> 62px shellY, 48px -> 104px shellY (both strictly <= 165 bottom)
+const ZONE_B_SLOT_Y = [6, 48] as const;
 
 export interface ActiveDialogueBubble {
   readonly id: string;

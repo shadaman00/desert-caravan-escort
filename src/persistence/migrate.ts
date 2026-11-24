@@ -1,5 +1,6 @@
-import { GameStoreState } from '../store/types';
-import { getDefaultState, CURRENT_SAVE_VERSION } from '../store/defaults';
+import { DailyMissionId, GameStoreState } from '../store/types';
+import { getDefaultState, CURRENT_SAVE_VERSION, getTodayDateString } from '../store/defaults';
+import { DAILY_MISSION_DEFINITIONS, createInitialDailyMissions } from '../game/data/dailyMissions';
 
 export interface MigrationResult {
   success: boolean;
@@ -41,6 +42,32 @@ export function migrate(envelope: any): MigrationResult {
     const tradeSlice = isPlainObject(rawState.trade) ? rawState.trade : {};
     const relicsSlice = isPlainObject(rawState.relics) ? rawState.relics : {};
     const stelesSlice = isPlainObject(rawState.steles) ? rawState.steles : {};
+    const missionsSlice = isPlainObject(rawState.dailyMissions) ? rawState.dailyMissions : null;
+    const todayStr = getTodayDateString();
+    let normalizedMissions = createInitialDailyMissions(todayStr);
+    if (
+      missionsSlice &&
+      typeof missionsSlice.resetDate === 'string' &&
+      Array.isArray(missionsSlice.items)
+    ) {
+      normalizedMissions = {
+        resetDate: missionsSlice.resetDate,
+        items: DAILY_MISSION_DEFINITIONS.map((def) => {
+          const match = missionsSlice.items.find(
+            (item: unknown) =>
+              isPlainObject(item) && (item.id as DailyMissionId) === def.id
+          );
+          return {
+            id: def.id,
+            progress:
+              match && typeof match.progress === 'number' && Number.isFinite(match.progress)
+                ? Math.max(0, Math.floor(match.progress))
+                : 0,
+            claimed: Boolean(match && match.claimed),
+          };
+        }),
+      };
+    }
 
     // Deep merge defaults for missing or non-object slices
     const state: GameStoreState = {
@@ -78,6 +105,7 @@ export function migrate(envelope: any): MigrationResult {
         ...stelesSlice,
         decoded: Array.isArray(stelesSlice.decoded) ? stelesSlice.decoded : [],
       },
+      dailyMissions: normalizedMissions,
     };
 
     // Forward version tag

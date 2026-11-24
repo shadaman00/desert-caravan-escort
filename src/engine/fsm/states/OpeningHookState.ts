@@ -106,8 +106,8 @@ export class OpeningHookState implements IGameState {
         id: 'intro_stele_1',
         kind: 'STELE',
         steleId: 1,
-        x: 340,
-        y: 412,
+        x: 420,
+        y: 336,
         durationSec: 2.0,
       });
     }
@@ -165,6 +165,16 @@ export class OpeningHookState implements IGameState {
 
   public skipIntro(fsm: GameFSM): void {
     this.completeIntro(fsm);
+  }
+
+  public triggerEmergencyEscape(fsm: GameFSM): boolean {
+    if (this.elapsedSeconds < 30 || this.elapsedSeconds >= 75) {
+      return false;
+    }
+    fsm.eventBus?.emit('camera:shake', { intensity: 10, duration: 0.6 });
+    this.dialogueSystem?.enqueue('카심', '긴급 탈출 부스터 점화! 모래폭풍을 돌파한다!', 'cue_p2_escape');
+    this.elapsedSeconds = 74.6;
+    return true;
   }
 
   private triggerDueDialogueCues(): void {

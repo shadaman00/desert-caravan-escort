@@ -2,7 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { AdTierLevel } from '../../store/types';
 
+export function isDebugBarEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const param = new URLSearchParams(window.location.search).get('debug');
+    if (param === '0') return false;
+    if (param === '1') return true;
+    if (window.localStorage.getItem('SANDWALKER_DEBUG') === '1') return true;
+  } catch {
+    // Ignore storage/URL parsing errors
+  }
+  const viteEnv = (import.meta as unknown as { env?: { DEV?: boolean } }).env;
+  if (viteEnv?.DEV) return true;
+  if (typeof window.navigator !== 'undefined' && Boolean(window.navigator.webdriver)) {
+    return true;
+  }
+  return false;
+}
+
 export const DebugBar: React.FC = () => {
+  const [enabled] = useState<boolean>(() => isDebugBarEnabled());
   const [collapsed, setCollapsed] = useState<boolean>(true);
   const [timeScale, setTimeScale] = useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -39,6 +58,10 @@ export const DebugBar: React.FC = () => {
     }
   };
 
+  if (!enabled) {
+    return null;
+  }
+
   if (collapsed) {
     return (
       <button
@@ -46,8 +69,8 @@ export const DebugBar: React.FC = () => {
         onClick={() => setCollapsed(false)}
         style={{
           position: 'fixed',
-          top: 8,
-          right: 8,
+          bottom: 6,
+          right: 6,
           zIndex: 999,
           background: 'rgba(11, 12, 16, 0.85)',
           color: '#ecc94b',
@@ -180,8 +203,8 @@ const DebugBarExpanded: React.FC<DebugBarExpandedProps> = ({
       className="debug-bar"
       style={{
         position: 'fixed',
-        top: 8,
-        right: 8,
+        bottom: 6,
+        right: 6,
         zIndex: 999,
         background: 'rgba(20, 24, 34, 0.96)',
         color: '#e2e8f0',
@@ -192,7 +215,7 @@ const DebugBarExpanded: React.FC<DebugBarExpandedProps> = ({
         fontSize: '11px',
         fontFamily: 'monospace',
         width: 280,
-        maxHeight: '90vh',
+        maxHeight: 'calc(100vh - 16px)',
         overflowY: 'auto',
       }}
     >

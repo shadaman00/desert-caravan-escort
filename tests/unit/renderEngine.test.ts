@@ -96,13 +96,13 @@ describe('Sandwalker IK, Wagons, SpriteSlot & ParticlePool Unit Suite', () => {
     expect(lv20.boltCount).toBe(3);
   });
 
-  it('computeWagonTrain positions 1-5 trailing wagons strictly inside [0, 430] with phase bobbing', () => {
+  it('computeWagonTrain positions 1-5 trailing wagons strictly inside [0, 680] with phase bobbing', () => {
     const poses = computeWagonTrain(
       {
         wagonCount: 5,
         equippedSkinId: 'DEFAULT',
-        walkerRearHitchX: 158,
-        walkerRearHitchY: 356,
+        walkerRearHitchX: 202,
+        walkerRearHitchY: 280,
         speed: 120,
       },
       240,
@@ -112,7 +112,7 @@ describe('Sandwalker IK, Wagons, SpriteSlot & ParticlePool Unit Suite', () => {
     expect(poses.length).toBe(5);
     for (const p of poses) {
       expect(p.wagonX - 8.5 >= 0).toBe(true);
-      expect(p.camelX + 6 <= 158).toBe(true);
+      expect(p.camelX + 6 <= 202).toBe(true);
     }
     expect(poses[0].bobOffsetY).not.toBe(poses[1].bobOffsetY);
 
@@ -120,8 +120,8 @@ describe('Sandwalker IK, Wagons, SpriteSlot & ParticlePool Unit Suite', () => {
       {
         wagonCount: 3,
         equippedSkinId: 'GOLDEN_PHARAOH',
-        walkerRearHitchX: 158,
-        walkerRearHitchY: 356,
+        walkerRearHitchX: 202,
+        walkerRearHitchY: 280,
         speed: 0,
       },
       0,
@@ -197,15 +197,15 @@ describe('Sandwalker IK, Wagons, SpriteSlot & ParticlePool Unit Suite', () => {
     // Verify 3x emission rate in STORM vs DAY
     const dayPool = new ParticlePool(300);
     const stormPool = new ParticlePool(300);
-    const dayCount = emitAmbientWind(dayPool, 1.0, false, 'DAY', 430, 412, () => 0.5);
-    const stormCount = emitAmbientWind(stormPool, 1.0, true, 'STORM', 430, 412, () => 0.5);
+    const dayCount = emitAmbientWind(dayPool, 1.0, false, 'DAY', 680, 336, () => 0.5);
+    const stormCount = emitAmbientWind(stormPool, 1.0, true, 'STORM', 680, 336, () => 0.5);
     expect(stormCount).toBe(dayCount * 3);
   });
 
-  it('computeCanvasBackingSize caps DPR at 2 for Zone B 430x512', () => {
-    expect(computeCanvasBackingSize(1)).toEqual({ dpr: 1, width: 430, height: 512 });
-    expect(computeCanvasBackingSize(2)).toEqual({ dpr: 2, width: 860, height: 1024 });
-    expect(computeCanvasBackingSize(3)).toEqual({ dpr: 2, width: 860, height: 1024 });
-    expect(computeCanvasBackingSize(Number.NaN)).toEqual({ dpr: 1, width: 430, height: 512 });
+  it('computeCanvasBackingSize caps DPR at 2 for Zone B 680x412', () => {
+    expect(computeCanvasBackingSize(1)).toEqual({ dpr: 1, width: 680, height: 412 });
+    expect(computeCanvasBackingSize(2)).toEqual({ dpr: 2, width: 1360, height: 824 });
+    expect(computeCanvasBackingSize(3)).toEqual({ dpr: 2, width: 1360, height: 824 });
+    expect(computeCanvasBackingSize(Number.NaN)).toEqual({ dpr: 1, width: 680, height: 412 });
   });
 });

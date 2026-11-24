@@ -415,7 +415,7 @@ export class TurretSystem {
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i];
       if (!t.alive) continue;
-      if (!t.snapPriority && t.x > 422) continue;
+      if (!t.snapPriority && t.x > 670) continue;
       // Prefer targets ahead of the walker; fallback to any target if behind
       const forwardPenalty = t.x < WALKER_ANCHOR_X - 24 ? 1000 : 0;
       const dist = Math.hypot(t.x - (WALKER_ANCHOR_X + 4), t.y - (WALKER_GROUND_Y - 88));
@@ -782,7 +782,7 @@ export class TurretSystem {
         });
 
         if (!hitTarget.knockbackImmune) {
-          hitTarget.x = Math.min(470, hitTarget.x + 12);
+          hitTarget.x = Math.min(715, hitTarget.x + 12);
           hitTarget.knockbackVx = Math.max(hitTarget.knockbackVx ?? 0, 220);
         }
 
@@ -814,7 +814,7 @@ export class TurretSystem {
       h.x = nextX;
       h.y = nextY;
 
-      if (h.x > 480 || h.x < -40 || h.y < -40 || h.y > 550) {
+      if (h.x > 730 || h.x < -40 || h.y < -40 || h.y > 450) {
         this.harpoons.splice(i, 1);
       }
     }

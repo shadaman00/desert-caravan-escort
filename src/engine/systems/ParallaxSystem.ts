@@ -113,6 +113,7 @@ export class ParallaxSystem {
       const offscreen = this.canvasFactory(this.tileWidth, spec.height);
       const offCtx = offscreen.getContext('2d');
       if (offCtx) {
+        offCtx.imageSmoothingEnabled = false;
         renderLayerToContext(spec.index, offCtx, palette, this.tileWidth, spec.height);
       }
       canvases.push(offscreen);
@@ -172,6 +173,7 @@ export class ParallaxSystem {
     viewportWidth: number
   ): void {
     ctx.save();
+    ctx.imageSmoothingEnabled = false;
     ctx.translate(-offset, 0);
     ctx.drawImage(canvas, 0, y);
     if (this.tileWidth - offset < viewportWidth) {

@@ -183,9 +183,9 @@ describe('Combat Systems (#16–#21, #23 Turret Synergy)', () => {
       expect(t1.tierScale).toBeCloseTo(1.0);
       expect(t2.tierScale).toBeCloseTo(1.1);
       expect(t3.tierScale).toBeCloseTo(1.2);
-      expect(t1.x).toBeCloseTo(200 + 30);
-      expect(t2.x).toBeCloseTo(200 + 30 * 1.1);
-      expect(t3.x).toBeCloseTo(200 + 30 * 1.2);
+      expect(t1.x).toBeCloseTo(244 + 30);
+      expect(t2.x).toBeCloseTo(244 + 30 * 1.1);
+      expect(t3.x).toBeCloseTo(244 + 30 * 1.2);
     });
   });
 
@@ -226,10 +226,10 @@ describe('Combat Systems (#16–#21, #23 Turret Synergy)', () => {
     it('pierces all aligned targets along the beam segment and misses off-axis targets', () => {
       const damageSystem = new DamageSystem();
       const turretSystem = new TurretSystem(damageSystem);
-      const t1 = makeTarget({ id: 't1', x: 270, y: 316, hp: 100 });
-      const t2 = makeTarget({ id: 't2', x: 330, y: 316, hp: 100 });
-      const t3 = makeTarget({ id: 't3', x: 390, y: 316, hp: 100 });
-      const offAxis = makeTarget({ id: 'off', x: 330, y: 180, hp: 100 });
+      const t1 = makeTarget({ id: 't1', x: 310, y: 240, hp: 100 });
+      const t2 = makeTarget({ id: 't2', x: 380, y: 240, hp: 100 });
+      const t3 = makeTarget({ id: 't3', x: 450, y: 240, hp: 100 });
+      const offAxis = makeTarget({ id: 'off', x: 380, y: 120, hp: 100 });
 
       turretSystem.update(0.1, {
         fsmStateId: 'MARCH_NORMAL',
@@ -242,7 +242,7 @@ describe('Combat Systems (#16–#21, #23 Turret Synergy)', () => {
       expect(t2.hp).toBe(96);
       expect(t3.hp).toBe(96);
       expect(offAxis.hp).toBe(100);
-      expect(pointToSegmentDistance(330, 316, 230, 316, 730, 316)).toBe(0);
+      expect(pointToSegmentDistance(380, 240, 274, 240, 774, 240)).toBe(0);
     });
   });
 
@@ -444,32 +444,32 @@ describe('Combat Systems (#16–#21, #23 Turret Synergy)', () => {
   });
 
   describe('#21 Manual Weak-Point Drag Aim', () => {
-    it('maps Zone B coordinates via clientToZoneB and snaps within 40px radius', () => {
-      const rect = { left: 100, top: 200, width: 860, height: 1024 } as DOMRect;
-      const pt = clientToZoneB(100 + 430, 200 + 512, rect);
-      expect(pt.x).toBeCloseTo(215);
-      expect(pt.y).toBeCloseTo(256);
+    it('maps Zone B coordinates via clientToZoneB and snaps within 48px radius', () => {
+      const rect = { left: 100, top: 200, width: 1360, height: 824 } as DOMRect;
+      const pt = clientToZoneB(100 + 680, 200 + 412, rect);
+      expect(pt.x).toBeCloseTo(340);
+      expect(pt.y).toBeCloseTo(206);
 
       const t1 = makeTarget({
         id: 't_reg',
         x: 300,
-        y: 350,
+        y: 300,
         weakPointOffset: { x: 0, y: 0 },
       });
       const tWeak = makeTarget({
         id: 't_wp',
         x: 315,
-        y: 355,
-        weakPointOffset: { x: -5, y: -5 }, // weak point at (310, 350)
+        y: 305,
+        weakPointOffset: { x: -5, y: -5 }, // weak point at (310, 300)
         isWeakPoint: true,
       });
 
-      // 39px from t_reg -> snaps
-      expect(findSnapTarget(339, 350, [t1])?.id).toBe('t_reg');
-      // 41px from t_reg -> misses
-      expect(findSnapTarget(341, 350, [t1])).toBeNull();
+      // 47px from t_reg -> snaps (48px tolerance)
+      expect(findSnapTarget(347, 300, [t1])?.id).toBe('t_reg');
+      // 49px from t_reg -> misses
+      expect(findSnapTarget(349, 300, [t1])).toBeNull();
       // Both in range -> prefers isWeakPoint
-      expect(findSnapTarget(305, 350, [t1, tWeak])?.id).toBe('t_wp');
+      expect(findSnapTarget(305, 300, [t1, tWeak])?.id).toBe('t_wp');
     });
 
     it('holds manualAimTargetId for 2.0s after release and clears on expiry or death', () => {
@@ -743,8 +743,8 @@ describe('Combat Systems (#16–#21, #23 Turret Synergy)', () => {
       vi.stubGlobal('Path2D', MockPath2D);
       const ctx = createMockCtx();
       const canvas = {
-        width: 430,
-        height: 512,
+        width: 680,
+        height: 412,
         style: {} as CSSStyleDeclaration,
         getContext: vi.fn(() => ctx),
       } as unknown as HTMLCanvasElement;
@@ -792,9 +792,9 @@ describe('Combat Systems (#16–#21, #23 Turret Synergy)', () => {
       const turretSys = new TurretSystem(dmgSys);
 
       // Heat Ray: tLocked is manually locked; tOther is aligned behind it (not weak point)
-      const tLocked = makeTarget({ id: 'locked', x: 290, y: 316, hp: 200, isWeakPoint: false });
-      const tOther = makeTarget({ id: 'other', x: 350, y: 316, hp: 200, isWeakPoint: false });
-      turretSys.onPointerDown(290, 316, [tLocked, tOther]);
+      const tLocked = makeTarget({ id: 'locked', x: 320, y: 240, hp: 200, isWeakPoint: false });
+      const tOther = makeTarget({ id: 'other', x: 390, y: 240, hp: 200, isWeakPoint: false });
+      turretSys.onPointerDown(320, 240, [tLocked, tOther]);
 
       turretSys.update(0.1, {
         fsmStateId: 'MARCH_NORMAL',
@@ -860,8 +860,8 @@ describe('Combat Systems (#16–#21, #23 Turret Synergy)', () => {
       useGameStore.getState().switchTurret('HARPOON');
       const blocker = makeTarget({
         id: 'front_blocker',
-        x: 280,
-        y: 316,
+        x: 330,
+        y: 240,
         hp: 1000,
         maxHp: 1000,
         tags: ['SMALL_SWARM'], // 0.7x affinity for HARPOON -> 55 * 0.7 = 38.5 -> 39
@@ -869,14 +869,14 @@ describe('Combat Systems (#16–#21, #23 Turret Synergy)', () => {
       });
       const lockedBack = makeTarget({
         id: 'locked_back',
-        x: 380,
-        y: 316,
+        x: 440,
+        y: 240,
         hp: 1000,
         maxHp: 1000,
         tags: ['HEAVY_ARMOR'],
         isWeakPoint: false,
       });
-      harpSys.onPointerDown(380, 316, [blocker, lockedBack]);
+      harpSys.onPointerDown(440, 240, [blocker, lockedBack]);
       harpSys.update(1.0, {
         fsmStateId: 'MARCH_NORMAL',
         storeState: useGameStore.getState(),

@@ -94,13 +94,13 @@ describe('M5 Economy, Codex, Dialogue, Excavation & Opening Timeline', () => {
     expect(getOpeningPhaseInfo(135).phase).toBe(4);
   });
 
-  it('DialogueSystem clamps <= 35 chars, wraps <= 2 lines, avoids [240, 480], caps at 2, and expires at 3.8s', () => {
+  it('DialogueSystem clamps <= 35 chars, wraps <= 2 lines, avoids [165, 400], caps at 2, and expires at 3.8s', () => {
     const dlg = new DialogueSystem();
     const wrapped = wrapBubbleText('신전의 문이 코앞이다! 열선 레이저 최대 출력, 길을 뚫어라! 초과텍스트');
     expect([...wrapped.clampedText].length).toBe(35);
     expect(wrapped.lines.length <= 2).toBe(true);
 
-    expect(computeSafeShellY(300) < 240).toBe(true);
+    expect(computeSafeShellY(240) < 165).toBe(true);
 
     dlg.enqueue('카심', '첫 번째 대사입니다.');
     dlg.enqueue('세라', '두 번째 대사입니다.');
@@ -109,7 +109,7 @@ describe('M5 Economy, Codex, Dialogue, Excavation & Opening Timeline', () => {
     expect(dlg.getActiveBubbles().length).toBe(2);
     expect(dlg.getQueuedCount()).toBe(1);
     for (const b of dlg.getDebugSnapshot().activeBalloons) {
-      expect(b.y + 42 <= 240).toBe(true);
+      expect(b.y + 42 <= 165).toBe(true);
     }
 
     // Hold at 3.5s -> fade at 3.65s -> expired at 3.8s + queue promotion

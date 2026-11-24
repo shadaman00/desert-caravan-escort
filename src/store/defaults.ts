@@ -1,4 +1,5 @@
 import { GameStoreState } from './types';
+import { createInitialDailyMissions } from '../game/data/dailyMissions';
 
 export const CURRENT_SAVE_VERSION = 1;
 
@@ -107,6 +108,7 @@ export function getDefaultState(): GameStoreState {
     steles: {
       decoded: [],
     },
+    dailyMissions: createInitialDailyMissions(getTodayDateString()),
   };
 }
 

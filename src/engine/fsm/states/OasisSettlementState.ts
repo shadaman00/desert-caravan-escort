@@ -9,10 +9,35 @@ export interface SettlementPayload {
   isChapterBossClear?: boolean;
 }
 
+export interface SettlementBreakdown {
+  cargoUnits: number;
+  purchaseCost: number;
+  priceRate: number;
+  baseRevenue: number;
+  harunUnlocked: boolean;
+  synergyActive: boolean;
+  harunMultiplier: number;
+  synergyMultiplier: number;
+  totalProfit: number;
+}
+
+const EMPTY_BREAKDOWN: SettlementBreakdown = {
+  cargoUnits: 0,
+  purchaseCost: 0,
+  priceRate: 1.0,
+  baseRevenue: 0,
+  harunUnlocked: false,
+  synergyActive: false,
+  harunMultiplier: 1.0,
+  synergyMultiplier: 1.0,
+  totalProfit: 0,
+};
+
 export class OasisSettlementState implements IGameState {
   public readonly id = 'OASIS_SETTLEMENT' as const;
   public isChapterBossClear = false;
   public totalProfit = 0;
+  public breakdown: SettlementBreakdown = { ...EMPTY_BREAKDOWN };
   public zafarClaimed = false;
   private isDismissing = false;
 
@@ -34,8 +59,28 @@ export class OasisSettlementState implements IGameState {
       store.mercenaries.length === 5 &&
       store.mercenaries.every((m: MercenaryState) => m.isUnlocked);
 
+    const cargoUnits = store.trade.cargo.reduce((sum, c) => sum + c.qty, 0);
+    const purchaseCost = store.trade.cargo.reduce(
+      (sum, c) => sum + c.qty * c.buyPrice,
+      0
+    );
+    const priceRate = store.trade.nextOasisPriceRate;
+    const harunMultiplier = harun ? 1.25 : 1.0;
+    const synergyMultiplier = synergy ? 1.2 : 1.0;
+
     // Sells trade cargo
-    this.totalProfit = store.sellCargo(store.trade.nextOasisPriceRate, harun, synergy);
+    this.totalProfit = store.sellCargo(priceRate, harun, synergy);
+    this.breakdown = {
+      cargoUnits,
+      purchaseCost: Math.round(purchaseCost),
+      priceRate,
+      baseRevenue: Math.round(purchaseCost * priceRate),
+      harunUnlocked: harun,
+      synergyActive: synergy,
+      harunMultiplier,
+      synergyMultiplier,
+      totalProfit: this.totalProfit,
+    };
 
     // Advance to next oasis index
     const nextOasisIndex = store.meta.currentOasisIndex + 1;

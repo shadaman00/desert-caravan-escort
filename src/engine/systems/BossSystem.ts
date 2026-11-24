@@ -11,6 +11,7 @@ import {
   type BossId,
   type BossPatternKind,
   type BossPhaseDefinition,
+  type BossSpecialKind,
 } from '@/game/data/bosses';
 
 export type BossAddKind = 'MIRAGE_CLONE' | 'PARASITE' | 'SMALL_SWARM';
@@ -49,6 +50,10 @@ export interface BossRenderSnapshot {
   telegraphActive: boolean;
   telegraphProgress: number;
   patternKind: BossPatternKind;
+  specialKind?: BossSpecialKind | null;
+  specialLabel?: string | null;
+  specialVisualTimer?: number;
+  specialTriggerCount?: number;
   breathVisualTimer: number;
   lungeOffsetX: number;
   hitFlashTimer: number;
@@ -67,6 +72,8 @@ export interface BossDebugSnapshot {
   maxArmor: number;
   isGroggy: boolean;
   telegraphActive: boolean;
+  specialKind: BossSpecialKind | null;
+  specialTriggerCount: number;
   recommendedTurret: TurretType;
   wavesSpawned: number;
 }
@@ -109,6 +116,8 @@ export class BossSystem {
   private wavesSpawned = 0;
   private breathVisualTimer = 0;
   private lungeOffsetX = 0;
+  private specialVisualTimer = 0;
+  private specialTriggerCount = 0;
   private defeated = false;
   private pendingPartBreakGear = 0;
   private pendingPartBreakKeys = 0;
@@ -191,6 +200,8 @@ export class BossSystem {
     this.telegraphTotalSec = 0;
     this.breathVisualTimer = 0;
     this.lungeOffsetX = 0;
+    this.specialVisualTimer = 0;
+    this.specialTriggerCount = 0;
     this.wavesSpawned = 0;
     this.pendingPartBreakGear = 0;
     this.pendingPartBreakKeys = 0;
@@ -331,6 +342,8 @@ export class BossSystem {
     this.groggyRemainingSec = 0;
     this.telegraphActive = false;
     this.telegraphRemainingSec = 0;
+    this.specialVisualTimer = 0;
+    this.specialTriggerCount = 0;
     this.defeated = false;
     this.wavesSpawned = 0;
     this.pendingPartBreakGear = 0;
@@ -367,6 +380,8 @@ export class BossSystem {
     this.wavesSpawned = 0;
     this.breathVisualTimer = 0;
     this.lungeOffsetX = 0;
+    this.specialVisualTimer = 0;
+    this.specialTriggerCount = 0;
 
     this.bossTarget = {
       id: `boss_${def.id.toLowerCase()}`,
@@ -441,6 +456,9 @@ export class BossSystem {
     if (this.breathVisualTimer > 0) {
       this.breathVisualTimer = Math.max(0, this.breathVisualTimer - safeDt);
     }
+    if (this.specialVisualTimer > 0) {
+      this.specialVisualTimer = Math.max(0, this.specialVisualTimer - safeDt);
+    }
     if (this.lungeOffsetX < 0) {
       this.lungeOffsetX = Math.min(0, this.lungeOffsetX + 260 * safeDt);
     }
@@ -473,6 +491,10 @@ export class BossSystem {
             this.lungeOffsetX = -68;
           } else if (phaseDef.patternKind === 'SAND_BREATH') {
             this.breathVisualTimer = 0.65;
+          }
+
+          if (phaseDef.specialKind) {
+            this.triggerBossSpecialPattern(phaseDef.specialKind, options.particlePool);
           }
 
           if (options.isInvulnerable) {
@@ -542,7 +564,7 @@ export class BossSystem {
         }
       } else {
         if (add.knockbackVx && add.knockbackVx > 0) {
-          add.x = Math.min(470, add.x + add.knockbackVx * safeDt);
+          add.x = Math.min(715, add.x + add.knockbackVx * safeDt);
           add.knockbackVx = Math.max(0, add.knockbackVx - 460 * safeDt);
         } else {
           const stopX = add.explodeOnContact ? WALKER_FRONT_X + 16 : WALKER_FRONT_X + 24;
@@ -638,6 +660,92 @@ export class BossSystem {
     return { ancientGear: gear, templeKeys: keys };
   }
 
+  private triggerBossSpecialPattern(
+    specialKind: BossSpecialKind,
+    particlePool?: ParticlePool
+  ): void {
+    if (!this.bossTarget) return;
+    this.specialTriggerCount += 1;
+
+    if (specialKind === 'SMOKE_RUSH') {
+      // Visual rush offset only so bossTarget.x remains immune to knockback invariants
+      this.lungeOffsetX = -56;
+      this.specialVisualTimer = 0.85;
+      if (particlePool) {
+        for (let i = 0; i < 8; i++) {
+          particlePool.spawn({
+            kind: 'SAND_DUST',
+            x: this.bossTarget.x - 10 + (i % 4) * 10,
+            y: this.bossTarget.y - 6 - Math.floor(i / 4) * 8,
+            vx: 50 + i * 12,
+            vy: -18 - (i % 3) * 12,
+            gravity: 10,
+            size: 5,
+            endSize: 2,
+            maxLife: 0.55,
+            startAlpha: 0.85,
+            color: '#718096',
+          });
+        }
+      }
+      return;
+    }
+
+    if (specialKind === 'VENOM_BARRAGE') {
+      this.specialVisualTimer = 0.9;
+      if (particlePool) {
+        for (let i = 0; i < 10; i++) {
+          particlePool.spawn({
+            kind: 'SPARK',
+            x: this.bossTarget.x - 24,
+            y: this.bossTarget.y - 36,
+            vx: -(120 + i * 16),
+            vy: -40 + (i % 5) * 18,
+            gravity: 120,
+            size: 3.5,
+            endSize: 1,
+            maxLife: 0.5,
+            startAlpha: 0.95,
+            color: '#48bb78',
+          });
+        }
+      }
+      return;
+    }
+
+    if (specialKind === 'MIRAGE_SWAP') {
+      this.specialVisualTimer = 0.8;
+      const clone = this.adds.find((a) => a.alive && a.kind === 'MIRAGE_CLONE');
+      const oldBossX = this.bossTarget.x;
+      const oldBossY = this.bossTarget.y;
+      if (clone) {
+        this.bossTarget.x = Math.max(430, Math.min(570, clone.x));
+        this.bossTarget.y = Math.max(175, Math.min(295, clone.y));
+        clone.x = oldBossX;
+        clone.y = oldBossY;
+        clone.baseY = oldBossY;
+      }
+      if (particlePool) {
+        for (let i = 0; i < 8; i++) {
+          const atClone = i >= 4 && clone;
+          particlePool.spawn({
+            kind: 'SPARK',
+            x: atClone ? clone.x : this.bossTarget.x,
+            y: atClone ? clone.y : this.bossTarget.y,
+            vx: Math.cos(i * 1.4) * 55,
+            vy: Math.sin(i * 1.4) * 55,
+            gravity: 0,
+            size: 3.2,
+            endSize: 0.8,
+            maxLife: 0.45,
+            startAlpha: 0.9,
+            color: '#7dd3fc',
+          });
+        }
+      }
+    }
+  }
+
   private spawnDodgeSparks(particlePool?: ParticlePool): void {
     if (!particlePool) return;
     for (let i = 0; i < 6; i++) {
@@ -701,7 +809,7 @@ export class BossSystem {
     banditCount: number
   ): void {
     for (let i = 0; i < parasiteCount; i++) {
-      const startX = 338 + i * 18 + waveIdx * 6;
+      const startX = 520 + i * 18 + waveIdx * 6;
       const startY = WALKER_GROUND_Y - 12 - (i % 2) * 8;
       this.adds.push({
         id: `boss_add_${this.nextAddId++}`,
@@ -730,7 +838,7 @@ export class BossSystem {
     }
 
     for (let i = 0; i < banditCount; i++) {
-      const startX = 415 + i * 20;
+      const startX = 640 + i * 20;
       const startY = WALKER_GROUND_Y - 10;
       this.adds.push({
         id: `boss_add_${this.nextAddId++}`,
@@ -792,6 +900,10 @@ export class BossSystem {
       telegraphActive: this.telegraphActive,
       telegraphProgress,
       patternKind: phaseDef.patternKind,
+      specialKind: phaseDef.specialKind ?? null,
+      specialLabel: phaseDef.specialLabel ?? null,
+      specialVisualTimer: this.specialVisualTimer,
+      specialTriggerCount: this.specialTriggerCount,
       breathVisualTimer: this.breathVisualTimer,
       lungeOffsetX: this.lungeOffsetX,
       hitFlashTimer: this.bossTarget.hitFlashTimer ?? 0,
@@ -816,6 +928,8 @@ export class BossSystem {
       maxArmor: this.getMaxArmor(),
       isGroggy: this.isGroggy,
       telegraphActive: this.telegraphActive,
+      specialKind: phaseDef.specialKind ?? null,
+      specialTriggerCount: this.specialTriggerCount,
       recommendedTurret: phaseDef.recommendedTurret,
       wavesSpawned: this.wavesSpawned,
     };

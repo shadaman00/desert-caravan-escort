@@ -8,10 +8,45 @@ import {
   TimeOfDay,
   TradeCargoItem,
   CurrenciesState,
+  DailyMissionId,
+  DailyMissionsState,
 } from './types';
 import { getDefaultState, getTodayDateString } from './defaults';
+import {
+  createInitialDailyMissions,
+  getDailyMissionDefinition,
+} from '../game/data/dailyMissions';
 import { upgradeCost, tierUpGearCost, tradeSellPayout } from '../game/formulas';
 import { SaveManager } from '../persistence/saveManager';
+
+function ensureTodayMissions(
+  current: DailyMissionsState | undefined,
+  todayStr = getTodayDateString()
+): DailyMissionsState {
+  if (!current || current.resetDate !== todayStr || !Array.isArray(current.items)) {
+    return createInitialDailyMissions(todayStr);
+  }
+  return current;
+}
+
+function advanceMissionState(
+  current: DailyMissionsState | undefined,
+  id: DailyMissionId,
+  delta: number
+): DailyMissionsState {
+  const base = ensureTodayMissions(current);
+  const safeDelta = Number.isFinite(delta) && delta > 0 ? Math.floor(delta) : 0;
+  if (safeDelta <= 0) return base;
+  const def = getDailyMissionDefinition(id);
+  return {
+    ...base,
+    items: base.items.map((item) =>
+      item.id === id
+        ? { ...item, progress: Math.min(def.target, item.progress + safeDelta) }
+        : item
+    ),
+  };
+}
 
 export const useGameStore = create<GameStoreState & GameStoreActions>()((set, get) => ({
   ...getDefaultState(),
@@ -47,6 +82,7 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()((set, ge
   incrementOasisArrival: () =>
     set((state) => ({
       meta: { ...state.meta, oasisArrivalCount: state.meta.oasisArrivalCount + 1 },
+      dailyMissions: advanceMissionState(state.dailyMissions, 'CLEAR_ROUTE', 1),
     })),
 
   setRouteProgress: (progress: number) =>
@@ -288,6 +324,7 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()((set, ge
           [turret]: curLevel + 1,
         },
       },
+      dailyMissions: advanceMissionState(state.dailyMissions, 'UPGRADE_UNIT', 1),
     }));
     return true;
   },
@@ -340,6 +377,7 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()((set, ge
         ...state.sandwalker,
         legPartLevel: state.sandwalker.legPartLevel + 1,
       },
+      dailyMissions: advanceMissionState(state.dailyMissions, 'UPGRADE_UNIT', 1),
     }));
     return true;
   },
@@ -394,6 +432,7 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()((set, ge
       mercenaries: state.mercenaries.map((m) =>
         m.id === id ? { ...m, level: m.level + 1 } : m
       ),
+      dailyMissions: advanceMissionState(state.dailyMissions, 'UPGRADE_UNIT', 1),
     }));
     return true;
   },
@@ -506,6 +545,7 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()((set, ge
           ...state.trade,
           cargo: updatedCargo,
         },
+        dailyMissions: advanceMissionState(state.dailyMissions, 'BUY_CARGO', qty),
       };
     });
     return true;
@@ -592,6 +632,58 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()((set, ge
           : [...state.steles.decoded, steleId],
       },
     })),
+
+  // --------------------------------------------------------------------------
+  // Daily Missions Actions
+  // --------------------------------------------------------------------------
+  resetDailyMissionsIfNeeded: (todayStr = getTodayDateString()) =>
+    set((state) => {
+      if (state.dailyMissions && state.dailyMissions.resetDate === todayStr) {
+        return state;
+      }
+      return {
+        dailyMissions: createInitialDailyMissions(todayStr),
+      };
+    }),
+
+  recordMissionProgress: (id: DailyMissionId, delta = 1) =>
+    set((state) => ({
+      dailyMissions: advanceMissionState(state.dailyMissions, id, delta),
+    })),
+
+  claimDailyMission: (id: DailyMissionId) => {
+    const state = get();
+    const missions = ensureTodayMissions(state.dailyMissions);
+    const def = getDailyMissionDefinition(id);
+    const targetItem = missions.items.find((m) => m.id === id);
+    if (!targetItem || targetItem.claimed || targetItem.progress < def.target) {
+      return false;
+    }
+
+    const nextTickets =
+      state.monetization.adTier === 3
+        ? Math.max(9999, state.monetization.dailySkipTicketsLeft)
+        : state.monetization.dailySkipTicketsLeft + def.reward.skipTickets;
+
+    set((curr) => ({
+      currencies: {
+        ...curr.currencies,
+        ancientGear: curr.currencies.ancientGear + def.reward.ancientGear,
+        sunGold: curr.currencies.sunGold + def.reward.sunGold,
+      },
+      monetization: {
+        ...curr.monetization,
+        dailySkipTicketsLeft: nextTickets,
+      },
+      dailyMissions: {
+        ...missions,
+        items: missions.items.map((item) =>
+          item.id === id ? { ...item, claimed: true } : item
+        ),
+      },
+    }));
+    return true;
+  },
 
   // --------------------------------------------------------------------------
   // Lifecycle Actions

@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 
-/** Logical dimensions of the mobile viewport */
-export const LOGICAL_WIDTH = 430;
-export const LOGICAL_HEIGHT = 932;
+/** Logical dimensions of the 16:9 landscape viewport */
+export const LOGICAL_WIDTH = 960;
+export const LOGICAL_HEIGHT = 540;
 
-/** 3-Zone vertical bounds */
-export const ZONE_A_HEIGHT = 140; // 0 ~ 140px (15%)
-export const ZONE_B_HEIGHT = 512; // 140 ~ 652px (55%)
-export const ZONE_C_HEIGHT = 280; // 652 ~ 932px (30%)
+/** 3-Zone L-Shape landscape bounds */
+export const ZONE_A_HEIGHT = 56; // Top bar: 960 x 56
+export const ZONE_B_WIDTH = 680; // Left upper canvas: 680 x 412
+export const ZONE_B_HEIGHT = 412;
+export const ZONE_C_TACTICAL_HEIGHT = 72; // Left lower tactical bar: 680 x 72
+export const ZONE_C_WIDTH = 280; // Right side panel: 280 x 484
+export const ZONE_C_HEIGHT = 484;
 
 export interface ViewportScaleState {
   scale: number;
@@ -47,7 +50,7 @@ export function clientToLogical(
 }
 
 /**
- * Converts screen client coordinates to Zone B (430x512) Canvas coordinates.
+ * Converts screen client coordinates to Zone B (680x412) Canvas coordinates.
  */
 export function clientToZoneB(
   clientX: number,
@@ -57,12 +60,12 @@ export function clientToZoneB(
   if (canvasRect.width <= 0 || canvasRect.height <= 0) {
     return { x: 0, y: 0 };
   }
-  const scaleX = LOGICAL_WIDTH / canvasRect.width;
+  const scaleX = ZONE_B_WIDTH / canvasRect.width;
   const scaleY = ZONE_B_HEIGHT / canvasRect.height;
   const x = (clientX - canvasRect.left) * scaleX;
   const y = (clientY - canvasRect.top) * scaleY;
   return {
-    x: Math.max(0, Math.min(LOGICAL_WIDTH, x)),
+    x: Math.max(0, Math.min(ZONE_B_WIDTH, x)),
     y: Math.max(0, Math.min(ZONE_B_HEIGHT, y)),
   };
 }

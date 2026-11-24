@@ -14,6 +14,8 @@ export type BossPatternKind =
   | 'SAND_BREATH'
   | 'PARASITE_SWARM';
 
+export type BossSpecialKind = 'SMOKE_RUSH' | 'VENOM_BARRAGE' | 'MIRAGE_SWAP';
+
 export interface BossPartBreakRewards {
   ancientGear: number;
   templeKeys: number;
@@ -42,6 +44,8 @@ export interface BossPhaseDefinition {
   readonly recommendedTurret: TurretType;
   readonly weakPointOffset: { readonly x: number; readonly y: number };
   readonly patternKind: BossPatternKind;
+  readonly specialKind?: BossSpecialKind;
+  readonly specialLabel?: string;
   readonly telegraphDurationSec: number;
   readonly attackIntervalSec: number;
   readonly attackDamage: number;
@@ -79,8 +83,8 @@ export const BOSS_DEFINITIONS: Record<BossId, BossDefinition> = {
     name: '약탈왕 바르카 장갑차',
     isMultiPhase: false,
     maxHp: 2000,
-    x: 345,
-    y: 376,
+    x: 550,
+    y: 300,
     radius: 40,
     phases: [
       {
@@ -93,6 +97,8 @@ export const BOSS_DEFINITIONS: Record<BossId, BossDefinition> = {
         recommendedTurret: 'HARPOON',
         weakPointOffset: { x: -16, y: -18 },
         patternKind: 'RAM_CANNON',
+        specialKind: 'SMOKE_RUSH',
+        specialLabel: '연막 돌진',
         telegraphDurationSec: 1.0,
         attackIntervalSec: 2.0,
         attackDamage: 45,
@@ -112,8 +118,8 @@ export const BOSS_DEFINITIONS: Record<BossId, BossDefinition> = {
     name: '사막 전갈 군주 스콜피온 렉스',
     isMultiPhase: false,
     maxHp: 3000,
-    x: 348,
-    y: 378,
+    x: 555,
+    y: 302,
     radius: 42,
     phases: [
       {
@@ -126,6 +132,8 @@ export const BOSS_DEFINITIONS: Record<BossId, BossDefinition> = {
         recommendedTurret: 'HARPOON',
         weakPointOffset: { x: -24, y: -48 },
         patternKind: 'STINGER_STRIKE',
+        specialKind: 'VENOM_BARRAGE',
+        specialLabel: '독침 광역기',
         telegraphDurationSec: 1.2,
         attackIntervalSec: 2.2,
         attackDamage: 70,
@@ -148,8 +156,8 @@ export const BOSS_DEFINITIONS: Record<BossId, BossDefinition> = {
     name: '천년의 파수꾼 신기루 정령왕',
     isMultiPhase: false,
     maxHp: 3500,
-    x: 345,
-    y: 312,
+    x: 550,
+    y: 236,
     radius: 38,
     phases: [
       {
@@ -162,6 +170,8 @@ export const BOSS_DEFINITIONS: Record<BossId, BossDefinition> = {
         recommendedTurret: 'HEAT_RAY',
         weakPointOffset: { x: 0, y: -22 },
         patternKind: 'MIRAGE_BOLT',
+        specialKind: 'MIRAGE_SWAP',
+        specialLabel: '분신 스왑',
         telegraphDurationSec: 0.9,
         attackIntervalSec: 2.4,
         attackDamage: 65,
@@ -187,8 +197,8 @@ export const BOSS_DEFINITIONS: Record<BossId, BossDefinition> = {
     name: '초거대 아포피스 샌드웜',
     isMultiPhase: true,
     maxHp: 7000,
-    x: 350,
-    y: 382,
+    x: 560,
+    y: 306,
     radius: 46,
     phases: [
       {

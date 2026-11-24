@@ -117,6 +117,19 @@ export interface StelesState {
   decoded: number[];              // Decoded stele IDs
 }
 
+export type DailyMissionId = 'BUY_CARGO' | 'UPGRADE_UNIT' | 'CLEAR_ROUTE';
+
+export interface DailyMissionProgress {
+  id: DailyMissionId;
+  progress: number;
+  claimed: boolean;
+}
+
+export interface DailyMissionsState {
+  resetDate: string;
+  items: DailyMissionProgress[];
+}
+
 /**
  * Root GameStoreState schema combining PRD §2.2 and Plan §5.1 extension fields.
  */
@@ -129,6 +142,7 @@ export interface GameStoreState {
   trade: TradeState;
   relics: RelicsState;
   steles: StelesState;
+  dailyMissions?: DailyMissionsState;
 }
 
 /**
@@ -184,6 +198,11 @@ export interface GameStoreActions {
   addPendingRelic: (id: string, durationMs?: number) => void;
   resolveRelic: (id: string) => void;
   decodeStele: (steleId: number) => void;
+
+  // Daily Mission Actions
+  recordMissionProgress: (id: DailyMissionId, delta?: number) => void;
+  claimDailyMission: (id: DailyMissionId) => boolean;
+  resetDailyMissionsIfNeeded: (todayStr?: string) => void;
 
   // Bulk / Lifecycle Actions
   resetToDefaults: () => void;

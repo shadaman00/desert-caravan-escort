@@ -339,7 +339,7 @@ test.describe('Tier 1: Feature 35 — Dialogue Balloon System', () => {
     errorTracker.assertNoErrors();
   });
 
-  test('TC-OPEN-11: AC-02 guarantees dialogue balloons never overlap central combat band y in [240, 480] (F35)', async ({
+  test('TC-OPEN-11: AC-02 guarantees dialogue balloons never overlap central combat band y in [165, 400] (F35)', async ({
     gamePage,
     errorTracker,
   }) => {

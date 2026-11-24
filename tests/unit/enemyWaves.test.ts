@@ -77,8 +77,9 @@ describe('Basic Enemy Waves (#24) & Combat Integration', () => {
     coordinator.update(3.0, 'EMERGENCY_REVIVE', useGameStore.getState(), useGameStore.getState());
     expect(coordinator.spawnSystem.getEnemies().length).toBe(0);
 
-    // Spawns during MARCH_NORMAL (dt=1.45 triggers wave 1 of 3 bandits without wiping all 3)
-    coordinator.update(1.45, 'MARCH_NORMAL', useGameStore.getState(), useGameStore.getState());
+    // Spawns during MARCH_NORMAL across two steps so wave 1 spawns without a single massive beam tick wiping all 3
+    coordinator.update(1.3, 'MARCH_NORMAL', useGameStore.getState(), useGameStore.getState());
+    coordinator.update(0.15, 'MARCH_NORMAL', useGameStore.getState(), useGameStore.getState());
     expect(coordinator.spawnSystem.getEnemies().length > 0).toBe(true);
 
     // Clearing on BOSS_ENCOUNTER entry via EventBus

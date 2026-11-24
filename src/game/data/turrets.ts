@@ -4,7 +4,7 @@ export const TURRET_SWITCH_COOLDOWN_SEC = 0.3;
 export const TURRET_SWAP_ANIM_SEC = 0.15;
 export const MORTAR_AOE_RADIUS_PX = 90;
 export const MORTAR_GRAVITY_PX_S2 = 520;
-export const WEAK_POINT_SNAP_RADIUS_PX = 40;
+export const WEAK_POINT_SNAP_RADIUS_PX = 48;
 export const MANUAL_AIM_LOCK_DURATION_SEC = 2.0;
 export const WEAK_POINT_DAMAGE_MULTIPLIER = 1.5;
 export const SYNERGY_ATTACK_BONUS = 0.25;
@@ -33,7 +33,7 @@ export const TURRET_CONFIGS: Record<TurretType, TurretConfig> = {
     baseDpsLv1: 40,
     fireIntervalSec: 0.1,
     baseDamagePerHit: 4.0,
-    rangePx: 500,
+    rangePx: 620,
     projectileSpeedPx: 0,
     knockbackPx: 0,
     armorCrushFactor: 0.5,
@@ -48,7 +48,7 @@ export const TURRET_CONFIGS: Record<TurretType, TurretConfig> = {
     baseDpsLv1: 55,
     fireIntervalSec: 1.0,
     baseDamagePerHit: 55,
-    rangePx: 480,
+    rangePx: 600,
     projectileSpeedPx: 760,
     knockbackPx: 32,
     armorCrushFactor: 2.0,
@@ -63,7 +63,7 @@ export const TURRET_CONFIGS: Record<TurretType, TurretConfig> = {
     baseDpsLv1: 35,
     fireIntervalSec: 1.5,
     baseDamagePerHit: 52.5,
-    rangePx: 460,
+    rangePx: 580,
     projectileSpeedPx: 0,
     knockbackPx: 0,
     armorCrushFactor: 1.0,

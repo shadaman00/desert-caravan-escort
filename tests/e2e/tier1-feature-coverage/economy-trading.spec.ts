@@ -49,11 +49,11 @@ interface LogicalRect {
   height: number;
 }
 
-const R_TURRET: LogicalRect = { x: 170, y: 295, width: 65, height: 48 };
-const R_WALKER_LEGS: LogicalRect = { x: 145, y: 358, width: 105, height: 60 };
-const R_REAR_WAGONS: LogicalRect = { x: 3, y: 375, width: 150, height: 48 };
-const R_WAGON_1: LogicalRect = { x: 118, y: 385, width: 35, height: 28 };
-const R_WAGON_1_CANOPY: LogicalRect = { x: 120, y: 387, width: 16, height: 9 };
+const R_TURRET: LogicalRect = { x: 214, y: 219, width: 65, height: 48 };
+const R_WALKER_LEGS: LogicalRect = { x: 189, y: 282, width: 105, height: 60 };
+const R_REAR_WAGONS: LogicalRect = { x: 47, y: 299, width: 150, height: 48 };
+const R_WAGON_1: LogicalRect = { x: 162, y: 309, width: 35, height: 28 };
+const R_WAGON_1_CANOPY: LogicalRect = { x: 164, y: 311, width: 16, height: 9 };
 
 type PixelPredicate = 'cyanGlow' | 'wagonDarkBed' | 'pharaohPurple' | 'goldTrim' | 'legArmorMetal';
 

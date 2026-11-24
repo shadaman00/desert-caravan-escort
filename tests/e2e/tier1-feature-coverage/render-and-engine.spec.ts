@@ -45,20 +45,20 @@ interface LogicalRect {
   height: number;
 }
 
-// Isolated Zone B (430x512) sampling regions derived from render layout contracts
-const R_SKY: LogicalRect = { x: 20, y: 15, width: 200, height: 100 }; // Particle-free sky band (y < 120)
+// Isolated Zone B (680x412) sampling regions derived from render layout contracts
+const R_SKY: LogicalRect = { x: 20, y: 12, width: 320, height: 75 }; // Particle-free sky band (y < 90, left of sun)
 const R_SKY_CORNER: LogicalRect = { x: 5, y: 5, width: 40, height: 40 }; // Outer corner for storm vignette
-const R_AMBIENT_AIR: LogicalRect = { x: 20, y: 125, width: 250, height: 42 }; // Above pyramids (y < 170), left of sun glow
-const R_FAR_DUNE: LogicalRect = { x: 260, y: 198, width: 150, height: 72 }; // Layer 0 pyramids & far dunes (k=0.1)
-const R_MID_NEAR: LogicalRect = { x: 260, y: 275, width: 150, height: 85 }; // Layer 1/2 mid dunes & ridges (k=0.3/0.6)
-const R_FG_SCROLL: LogicalRect = { x: 20, y: 428, width: 390, height: 58 }; // Layer 3 ripples & tracks (k=1.0)
-const R_WALKER_HULL: LogicalRect = { x: 157, y: 324, width: 77, height: 36 };
-const R_WALKER_LEGS: LogicalRect = { x: 145, y: 358, width: 105, height: 60 };
-const R_WAGON_1: LogicalRect = { x: 118, y: 385, width: 35, height: 28 };
-const R_WAGON_2_3: LogicalRect = { x: 61, y: 385, width: 57, height: 28 };
-const R_WAGON_4_5: LogicalRect = { x: 3, y: 385, width: 55, height: 28 };
-const R_HARNESS: LogicalRect = { x: 146, y: 355, width: 15, height: 48 };
-const R_WAGON_1_CANOPY: LogicalRect = { x: 120, y: 387, width: 16, height: 9 };
+const R_AMBIENT_AIR: LogicalRect = { x: 20, y: 90, width: 320, height: 28 }; // Above pyramids (y < 120), left of sun glow
+const R_FAR_DUNE: LogicalRect = { x: 110, y: 140, width: 180, height: 65 }; // Layer 0 pyramids & far dunes (k=0.1)
+const R_MID_NEAR: LogicalRect = { x: 380, y: 205, width: 220, height: 80 }; // Layer 1/2 mid dunes & ridges (k=0.3/0.6)
+const R_FG_SCROLL: LogicalRect = { x: 20, y: 348, width: 640, height: 56 }; // Layer 3 ripples & tracks (k=1.0)
+const R_WALKER_HULL: LogicalRect = { x: 201, y: 248, width: 77, height: 36 };
+const R_WALKER_LEGS: LogicalRect = { x: 189, y: 282, width: 105, height: 60 };
+const R_WAGON_1: LogicalRect = { x: 162, y: 309, width: 35, height: 28 };
+const R_WAGON_2_3: LogicalRect = { x: 105, y: 309, width: 57, height: 28 };
+const R_WAGON_4_5: LogicalRect = { x: 47, y: 309, width: 55, height: 28 };
+const R_HARNESS: LogicalRect = { x: 190, y: 279, width: 15, height: 48 };
+const R_WAGON_1_CANOPY: LogicalRect = { x: 164, y: 311, width: 16, height: 9 };
 
 type ColorPredicateKind =
   | 'cyanGlow'
@@ -431,7 +431,7 @@ test.describe('Tier 1: Feature 11 — 4-Layer Offscreen Parallax', () => {
     errorTracker.assertNoErrors();
   });
 
-  test('TC-PAR-06: Crossing 860px offscreen tile wrap boundary renders seamlessly without blank seams', async ({
+  test('TC-PAR-06: Crossing 1360px offscreen tile wrap boundary renders seamlessly without blank seams', async ({
     gamePage,
     errorTracker,
   }) => {
@@ -444,11 +444,11 @@ test.describe('Tier 1: Feature 11 — 4-Layer Offscreen Parallax', () => {
     const startMeters = await readRouteMeters(gamePage);
     const fgBefore = await sampleCanvasRegionStats(gamePage, R_FG_SCROLL);
 
-    // At 4x (480 px/s), 2300ms covers ~1100px > 860px tileWidth
-    await gamePage.waitForTimeout(2300);
+    // At 4x (480 px/s), 3100ms covers ~1488px > 1360px tileWidth
+    await gamePage.waitForTimeout(3100);
 
     const endMeters = await readRouteMeters(gamePage);
-    expect(endMeters - startMeters).toBeGreaterThanOrEqual(860);
+    expect(endMeters - startMeters).toBeGreaterThanOrEqual(1360);
 
     const fgAfter = await sampleCanvasRegionStats(gamePage, R_FG_SCROLL);
     const farAfter = await sampleCanvasRegionStats(gamePage, R_FAR_DUNE);
@@ -540,15 +540,15 @@ test.describe('Tier 1: Feature 12 — Atmospheric Palette Grading', () => {
     expect(sky.g).toBeLessThan(40);
     expect(sky.b).toBeLessThan(65);
 
-    // Star at (112, 18) vs star-free adjacent patch at (112, 32)
+    // Star at (148, 16) vs star-free adjacent patch at (148, 31)
     const starPatchCount = await countMatchingCanvasPixels(
       gamePage,
-      { x: 109, y: 15, width: 6, height: 6 },
+      { x: 145, y: 13, width: 6, height: 6 },
       'brightStar'
     );
     const adjacentSkyCount = await countMatchingCanvasPixels(
       gamePage,
-      { x: 109, y: 29, width: 6, height: 6 },
+      { x: 145, y: 28, width: 6, height: 6 },
       'brightStar'
     );
     expect(starPatchCount).toBeGreaterThan(adjacentSkyCount);

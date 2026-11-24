@@ -101,10 +101,10 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'off',
 
-    /* Mobile Emulation: 430 x 932 logical resolution */
-    viewport: { width: 430, height: 932 },
+    /* Landscape 16:9 Emulation: 960 x 540 logical resolution */
+    viewport: { width: 960, height: 540 },
     deviceScaleFactor: 2,
-    isMobile: true,
+    isMobile: false,
     hasTouch: true,
   },
 
@@ -113,9 +113,9 @@ export default defineConfig({
       name: 'Mobile-Chromium',
       use: {
         browserName: 'chromium',
-        viewport: { width: 430, height: 932 },
+        viewport: { width: 960, height: 540 },
         deviceScaleFactor: 2,
-        isMobile: true,
+        isMobile: false,
         hasTouch: true,
         launchOptions: {
           ...(CHROMIUM_EXECUTABLE_PATH ? { executablePath: CHROMIUM_EXECUTABLE_PATH } : {}),

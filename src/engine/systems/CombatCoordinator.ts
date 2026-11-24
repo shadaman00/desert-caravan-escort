@@ -16,15 +16,15 @@ import { SpawnSystem } from './SpawnSystem';
 import { BossSystem, type BossDebugSnapshot } from './BossSystem';
 import { evasionCooldown, isExpeditionSynergyActive } from '@/game/formulas';
 import {
-  drawDamagePopups,
-  drawHarpoons,
-  drawHeatRayBeam,
-  drawMortarsAndExplosions,
-  drawWeakPointReticle,
-} from '@/engine/render/draw/projectiles';
-import { drawMercenaries } from '@/engine/render/draw/mercenary';
-import { drawEnemies } from '@/engine/render/draw/enemies';
-import { drawBoss } from '@/engine/render/draw/bosses';
+  drawPixelDamagePopups,
+  drawPixelHarpoons,
+  drawPixelHeatRayBeam,
+  drawPixelMortarsAndExplosions,
+  drawPixelWeakPointReticle,
+} from '@/engine/render/pixel/sprites/worldSprites';
+import { drawPixelMercenaries } from '@/engine/render/pixel/sprites/caravanSprites';
+import { drawPixelEnemies } from '@/engine/render/pixel/sprites/enemySprites';
+import { drawPixelBoss } from '@/engine/render/pixel/sprites/bossSprites';
 
 export const DODGE_BOOST_DURATION_SEC = 1.5;
 export const DODGE_BOOST_SPEED_MULTIPLIER = 1.6;
@@ -353,8 +353,8 @@ export class CombatCoordinator {
         const angle = (i / 14) * Math.PI * 2;
         particlePool.spawn({
           kind: i % 3 === 0 ? 'SAND_DUST' : 'SPARK',
-          x: 295,
-          y: 345,
+          x: 340,
+          y: 268,
           vx: Math.cos(angle) * (80 + i * 8),
           vy: Math.sin(angle) * (70 + i * 6) - 20,
           gravity: 80,
@@ -379,8 +379,8 @@ export class CombatCoordinator {
       affinityMultiplier: 1.0,
       isCrit: true,
       isWeakPoint: false,
-      x: targets[0]?.x ?? 295,
-      y: targets[0]?.y ?? 345,
+      x: targets[0]?.x ?? 340,
+      y: targets[0]?.y ?? 268,
     });
 
     return hitCount;
@@ -726,7 +726,7 @@ export class CombatCoordinator {
     const allTargets = this.getAllTargets();
     const turretSnap = this.turretSystem.getRenderState();
 
-    drawMercenaries(
+    drawPixelMercenaries(
       ctx,
       this.mercenarySystem.getRuntimeStates(),
       this.mercenarySystem.getVisualShots(),
@@ -734,7 +734,7 @@ export class CombatCoordinator {
       this.elapsedSec
     );
 
-    drawEnemies(
+    drawPixelEnemies(
       ctx,
       this.spawnSystem.getEnemies(),
       this.spawnSystem.getProjectiles(),
@@ -742,18 +742,18 @@ export class CombatCoordinator {
       this.elapsedSec
     );
 
-    drawBoss(
+    drawPixelBoss(
       ctx,
       this.bossSystem.getRenderSnapshot(),
       turretSnap.aimState.lockedTargetId ?? storeState.sandwalker.manualAimTargetId,
       this.elapsedSec
     );
 
-    drawHeatRayBeam(ctx, turretSnap.activeBeam);
-    drawHarpoons(ctx, turretSnap.harpoons);
-    drawMortarsAndExplosions(ctx, turretSnap.mortars, turretSnap.explosions);
-    drawWeakPointReticle(ctx, turretSnap.aimState, allTargets, this.elapsedSec);
-    drawDamagePopups(ctx, this.damageSystem.getPopups());
+    drawPixelHeatRayBeam(ctx, turretSnap.activeBeam);
+    drawPixelHarpoons(ctx, turretSnap.harpoons);
+    drawPixelMortarsAndExplosions(ctx, turretSnap.mortars, turretSnap.explosions);
+    drawPixelWeakPointReticle(ctx, turretSnap.aimState, allTargets, this.elapsedSec);
+    drawPixelDamagePopups(ctx, this.damageSystem.getPopups());
   }
 
   public getDebugSnapshot(
@@ -824,7 +824,9 @@ export class CombatCoordinator {
       isQuicksandSlowed: extra.routeSnap?.isQuicksandSlowed ?? false,
       isQuicksandBypassed: extra.routeSnap?.isQuicksandBypassed ?? false,
       isSandstorm: extra.routeSnap?.isSandstorm ?? false,
-      isSandstormVisionMasked: extra.routeSnap?.isSandstormVisionMasked ?? false,
+      isSandstormVisionMasked:
+        (extra.routeSnap?.isSandstormVisionMasked ?? false) &&
+        storeState.sandwalker.solarShieldHp <= 0,
       relayTowerVisible: extra.relayTowerVisible ?? false,
       boss: this.bossSystem.getDebugSnapshot(),
       particleCount: extra.particleCount ?? this.lastParticleCount,

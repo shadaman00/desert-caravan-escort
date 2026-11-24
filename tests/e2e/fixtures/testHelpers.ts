@@ -91,6 +91,7 @@ export const SELECTORS = {
   zoneA: '[data-testid="zone-a"], .zone-a, header',
   zoneB: '[data-testid="zone-b"], .zone-b, main',
   zoneC: '[data-testid="zone-c"], .zone-c, footer',
+  zoneCTactical: '[data-testid="zone-c-tactical"], .zone-c-tactical',
 
   // Battlefield Canvas
   gameCanvas: '[data-testid="game-canvas"], canvas#battlefield-canvas, canvas.zone-b-canvas, canvas',
@@ -411,8 +412,8 @@ export async function dragWeakPointAim(
   const holdMs = options?.holdMs ?? 200;
   const release = options?.release ?? true;
 
-  // Convert logical coordinates within Zone B (430x512) to viewport screen coordinates
-  const scale = box.width / 430;
+  // Convert logical coordinates within Zone B (680x412) to viewport screen coordinates
+  const scale = box.width / 680;
   const startX = box.x + startLogical.x * scale;
   const startY = box.y + startLogical.y * scale;
   const endX = box.x + endLogical.x * scale;
@@ -485,6 +486,8 @@ export interface CombatBossDebugSnapshot {
   wavesSpawned?: number;
   isGroggy: boolean;
   telegraphActive: boolean;
+  specialKind?: string | null;
+  specialTriggerCount?: number;
 }
 
 export interface CombatDamageEventSnapshot {
@@ -593,8 +596,9 @@ export async function readZoneAHud(page: Page): Promise<{
   const tierLoc = page.locator(SELECTORS.hudAdTierBadge).first();
   const adTierBadge = (await tierLoc.count()) > 0 ? ((await tierLoc.textContent()) || '').trim() : undefined;
   const fsmLoc = page.locator(SELECTORS.hudFsmBadge).first();
+  const fsmAttr = (await fsmLoc.count()) > 0 ? ((await fsmLoc.getAttribute('data-fsm-state')) || '').trim() : '';
   const fsmRaw = (await fsmLoc.count()) > 0 ? ((await fsmLoc.textContent()) || '').trim() : '';
-  const fsmState = fsmRaw ? fsmRaw.replace(/^FSM:\s*/i, '').trim() : undefined;
+  const fsmState = fsmAttr || (fsmRaw ? fsmRaw.replace(/^FSM:\s*/i, '').trim() : undefined);
 
   const extractInt = (str: string) => {
     const match = str.replace(/,/g, '').match(/\d+/);
@@ -665,7 +669,10 @@ export async function readZoneAHud(page: Page): Promise<{
  * Reads the current FSM state string from the Zone A FSM badge.
  */
 export async function readFsmState(page: Page): Promise<string> {
-  const raw = (await page.locator(SELECTORS.hudFsmBadge).first().textContent()) || '';
+  const loc = page.locator(SELECTORS.hudFsmBadge).first();
+  const attr = ((await loc.getAttribute('data-fsm-state').catch(() => null)) || '').trim();
+  if (attr) return attr;
+  const raw = (await loc.textContent()) || '';
   return raw.replace(/^FSM:\s*/i, '').trim();
 }
 
@@ -1190,30 +1197,36 @@ export async function assert3ZoneLayout(page: Page): Promise<void> {
   const zoneA = page.locator(SELECTORS.zoneA).first();
   const zoneB = page.locator(SELECTORS.zoneB).first();
   const zoneC = page.locator(SELECTORS.zoneC).first();
+  const zoneTac = page.locator(SELECTORS.zoneCTactical).first();
 
   await expect(zoneA).toBeVisible();
   await expect(zoneB).toBeVisible();
   await expect(zoneC).toBeVisible();
+  await expect(zoneTac).toBeVisible();
 
   const boxA = await zoneA.boundingBox();
   const boxB = await zoneB.boundingBox();
   const boxC = await zoneC.boundingBox();
+  const boxTac = await zoneTac.boundingBox();
 
   expect(boxA).not.toBeNull();
   expect(boxB).not.toBeNull();
   expect(boxC).not.toBeNull();
+  expect(boxTac).not.toBeNull();
 
-  if (boxA && boxB && boxC) {
-    // Zone A is stacked directly above Zone B; Zone B above Zone C
+  if (boxA && boxB && boxC && boxTac) {
+    // 16:9 L-Shape: Zone A on top; Zone B + Zone C-Tactical on left; Zone C dashboard on right
     expect(boxB.y).toBeGreaterThanOrEqual(boxA.y + boxA.height - 2);
-    expect(boxC.y).toBeGreaterThanOrEqual(boxB.y + boxB.height - 2);
+    expect(boxC.y).toBeGreaterThanOrEqual(boxA.y + boxA.height - 2);
+    expect(boxTac.y).toBeGreaterThanOrEqual(boxB.y + boxB.height - 2);
+    expect(boxC.x).toBeGreaterThanOrEqual(boxB.x + boxB.width - 2);
   }
 }
 
 /**
  * Validates all visible dialogue balloons for AC-02 compliance:
  * - String length <= 35 characters (inclusive of spaces per PRD §7 AC-02)
- * - Clears central combat band: logical y ∉ [240, 480] (normalized to 430x932 shell)
+ * - Clears central combat band: logical y ∉ [165, 400] (normalized to 960x540 landscape shell)
  */
 export async function assertDialogueCompliance(
   page: Page,
@@ -1237,7 +1250,7 @@ export async function assertDialogueCompliance(
   ).toBeGreaterThanOrEqual(minCount);
 
   const shellBox = await page.locator(SELECTORS.viewportShell).first().boundingBox();
-  const scale = shellBox && shellBox.width > 0 ? shellBox.width / 430 : 1;
+  const scale = shellBox && shellBox.width > 0 ? shellBox.width / 960 : 1;
   const originY = shellBox ? shellBox.y : 0;
 
   for (const balloon of visibleBalloons) {
@@ -1254,11 +1267,11 @@ export async function assertDialogueCompliance(
     if (box) {
       const logicalTop = (box.y - originY) / scale;
       const logicalBottom = (box.y + box.height - originY) / scale;
-      // Must not intersect central combat band [240, 480]
-      const clearsBand = logicalBottom <= 240 || logicalTop >= 480;
+      // Must not intersect central combat band [165, 400]
+      const clearsBand = logicalBottom <= 165 || logicalTop >= 400;
       expect(
         clearsBand,
-        `Dialogue balloon logical Y range [${logicalTop.toFixed(1)}, ${logicalBottom.toFixed(1)}] overlaps central combat band [240, 480]`
+        `Dialogue balloon logical Y range [${logicalTop.toFixed(1)}, ${logicalBottom.toFixed(1)}] overlaps central combat band [165, 400]`
       ).toBe(true);
     }
   }
@@ -1276,7 +1289,7 @@ export async function assertDialogue2LineClamp(
   const balloons = page.locator(SELECTORS.dialogueBubble);
   const count = await balloons.count();
   const shellBox = await page.locator(SELECTORS.viewportShell).first().boundingBox();
-  const scale = shellBox && shellBox.width > 0 ? shellBox.width / 430 : 1;
+  const scale = shellBox && shellBox.width > 0 ? shellBox.width / 960 : 1;
 
   for (let i = 0; i < count; i++) {
     const balloon = balloons.nth(i);
@@ -1306,8 +1319,8 @@ export async function assertDialogue2LineClamp(
     ).toBeLessThanOrEqual(2);
     expect(
       box.width,
-      `Dialogue balloon width (${box.width.toFixed(1)}px) exceeds scaled 430px viewport (${(430 * scale).toFixed(1)}px)`
-    ).toBeLessThanOrEqual(430 * scale + 1);
+      `Dialogue balloon width (${box.width.toFixed(1)}px) exceeds scaled 680px Zone B (${(680 * scale).toFixed(1)}px)`
+    ).toBeLessThanOrEqual(680 * scale + 1);
   }
 }
 
@@ -1680,8 +1693,8 @@ export async function aimAtFirstEnemyWeakPoint(
     ? chosen.weakPoints[0].y
     : chosen.y;
 
-  const targetX = Math.max(0, Math.min(430, rawX));
-  const targetY = Math.max(0, Math.min(512, rawY));
+  const targetX = Math.max(0, Math.min(680, rawX));
+  const targetY = Math.max(0, Math.min(412, rawY));
   const startX = targetX >= 35 ? targetX - 30 : targetX + 30;
   const startY = targetY >= 25 ? targetY - 20 : targetY + 20;
 

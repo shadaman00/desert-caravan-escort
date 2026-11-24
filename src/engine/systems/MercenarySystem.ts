@@ -290,7 +290,7 @@ export class MercenarySystem {
           for (let i = 0; i < closeEnemies.length; i++) {
             const e = closeEnemies[i];
             if (!e.knockbackImmune) {
-              e.x = Math.min(470, e.x + TARIK_KNOCKBACK_PX);
+              e.x = Math.min(715, e.x + TARIK_KNOCKBACK_PX);
               e.knockbackVx = Math.max(e.knockbackVx ?? 0, 140);
             }
           }

@@ -15,7 +15,7 @@ import type { CombatTarget } from './DamageSystem';
 
 export const MAX_ACTIVE_ENEMIES = 28;
 export const WAVE_SPAWN_INTERVAL_SEC = 2.2;
-export const WALKER_FRONT_X = WALKER_ANCHOR_X + 36; // 232px
+export const WALKER_FRONT_X = WALKER_ANCHOR_X + 36; // 276px
 
 export interface EnemyInstance extends CombatTarget {
   archetypeId: EnemyArchetypeId;
@@ -99,7 +99,7 @@ export class SpawnSystem {
       id: `enemy_${this.nextEnemyId++}`,
       archetypeId,
       tags: [...def.tags],
-      x: overrides.x ?? 454,
+      x: overrides.x ?? 690,
       y: baseY,
       baseY,
       vx: def.baseSpeed,
@@ -175,7 +175,7 @@ export class SpawnSystem {
     let spawned = 0;
     for (let i = 0; i < count; i++) {
       if (this.enemies.length >= MAX_ACTIVE_ENEMIES) break;
-      const offsetX = 418 + i * 18 + this.rng() * 6;
+      const offsetX = 655 + i * 20 + this.rng() * 8;
       const offsetY =
         archetype === 'MIRAGE_SPIRIT'
           ? WALKER_GROUND_Y + ENEMY_ARCHETYPES.MIRAGE_SPIRIT.yOffsetFromGround + (this.rng() - 0.5) * 26
@@ -255,7 +255,7 @@ export class SpawnSystem {
       }
 
       if (e.knockbackVx > 0) {
-        e.x = Math.min(470, e.x + e.knockbackVx * safeDt);
+        e.x = Math.min(715, e.x + e.knockbackVx * safeDt);
         e.knockbackVx = Math.max(0, e.knockbackVx - 460 * safeDt);
       } else {
         const stopX = WALKER_FRONT_X + e.attackRange;
@@ -317,7 +317,7 @@ export class SpawnSystem {
           startAlpha: 0.9,
           color: p.color,
         });
-      } else if (p.x < -30 || p.x > 480 || p.y < -30 || p.y > 550) {
+      } else if (p.x < -30 || p.x > 730 || p.y < -30 || p.y > 450) {
         this.projectiles.splice(i, 1);
       }
     }

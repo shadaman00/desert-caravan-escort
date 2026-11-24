@@ -97,14 +97,14 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
     }
 
     const offsets = parallax.getOffsets();
-    expect(offsets[0]).toBeCloseTo(120 % 860, 3);
-    expect(offsets[1]).toBeCloseTo(360 % 860, 3);
-    expect(offsets[2]).toBeCloseTo(720 % 860, 3);
-    expect(offsets[3]).toBeCloseTo(1200 % 860, 3);
+    expect(offsets[0]).toBeCloseTo(120 % PARALLAX_TILE_WIDTH, 3);
+    expect(offsets[1]).toBeCloseTo(360 % PARALLAX_TILE_WIDTH, 3);
+    expect(offsets[2]).toBeCloseTo(720 % PARALLAX_TILE_WIDTH, 3);
+    expect(offsets[3]).toBeCloseTo(1200 % PARALLAX_TILE_WIDTH, 3);
 
-    const mockMainCtx = factory(430, 512).getContext('2d')!;
+    const mockMainCtx = factory(680, 412).getContext('2d')!;
     for (let f = 0; f < 30; f++) {
-      parallax.render(mockMainCtx, 430, 512);
+      parallax.render(mockMainCtx, 680, 412);
     }
     expect(parallax.getRebuildCount()).toBe(1);
     expect(created.length).toBe(5); // 4 cached layers + 1 test main canvas
@@ -113,7 +113,7 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
     parallax.update(0.5, 120, 'STORM');
     for (let f = 0; f < 60; f++) {
       parallax.update(1 / 60, 120, 'STORM');
-      parallax.render(mockMainCtx, 430, 512);
+      parallax.render(mockMainCtx, 680, 412);
     }
     expect(parallax.getRebuildCount()).toBe(2);
   });
@@ -221,7 +221,7 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
     expect(bus.listenerCount('state:change')).toBe(0);
   });
 
-  it('produces zero-seam periodic polylines (|y(0) - y(860)| < 1e-9) across all 4 desert layers', () => {
+  it('produces zero-seam periodic polylines (|y(0) - y(1360)| < 1e-9) across all 4 desert layers', () => {
     interface Point {
       x: number;
       y: number;
@@ -291,7 +291,7 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
       renderLayer0FarDunes(rec0.ctx, PALETTES.DAY, PARALLAX_TILE_WIDTH, DESERT_LAYER_SPECS[0].height);
       const l0Wave = rec0.filled.filter((p) => p.points.length > 20);
       expect(l0Wave.length).toBe(1);
-      expect(Math.abs(evalPolylineY(l0Wave[0].points, 0) - evalPolylineY(l0Wave[0].points, 860)) < 1e-9).toBe(true);
+      expect(Math.abs(evalPolylineY(l0Wave[0].points, 0) - evalPolylineY(l0Wave[0].points, PARALLAX_TILE_WIDTH)) < 1e-9).toBe(true);
 
       // Layer 1: back and front dune silhouettes
       const rec1 = makeRecordingCtx();
@@ -299,7 +299,7 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
       const l1Waves = rec1.filled.filter((p) => p.points.length > 20);
       expect(l1Waves.length).toBe(2);
       for (const p of l1Waves) {
-        expect(Math.abs(evalPolylineY(p.points, 0) - evalPolylineY(p.points, 860)) < 1e-9).toBe(true);
+        expect(Math.abs(evalPolylineY(p.points, 0) - evalPolylineY(p.points, PARALLAX_TILE_WIDTH)) < 1e-9).toBe(true);
       }
 
       // Layer 2: near sandstone ridge silhouette
@@ -307,7 +307,7 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
       renderLayer2NearRidges(rec2.ctx, PALETTES.DAY, PARALLAX_TILE_WIDTH, DESERT_LAYER_SPECS[2].height);
       const l2Wave = rec2.filled.filter((p) => p.points.length > 20);
       expect(l2Wave.length).toBe(1);
-      expect(Math.abs(evalPolylineY(l2Wave[0].points, 0) - evalPolylineY(l2Wave[0].points, 860)) < 1e-9).toBe(true);
+      expect(Math.abs(evalPolylineY(l2Wave[0].points, 0) - evalPolylineY(l2Wave[0].points, PARALLAX_TILE_WIDTH)) < 1e-9).toBe(true);
 
       // Layer 3: 3 foreground sand ripple strokes
       const rec3 = makeRecordingCtx();
@@ -315,7 +315,7 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
       const l3Ripples = rec3.stroked.filter((p) => p.points.length > 20);
       expect(l3Ripples.length).toBe(3);
       for (const p of l3Ripples) {
-        expect(Math.abs(evalPolylineY(p.points, 0) - evalPolylineY(p.points, 860)) < 1e-9).toBe(true);
+        expect(Math.abs(evalPolylineY(p.points, 0) - evalPolylineY(p.points, PARALLAX_TILE_WIDTH)) < 1e-9).toBe(true);
       }
     } finally {
       (globalThis as unknown as { Path2D: unknown }).Path2D = prevPath2D;
@@ -486,7 +486,7 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
       // Advance DAY -> DUSK to t = 0.3
       parallax.update(0.6, 0, 'DUSK');
       drawCalls.length = 0;
-      parallax.render(ctx, 430, 512);
+      parallax.render(ctx, 680, 412);
       const preInterruptDuskAlphas = drawCalls
         .filter((d) => Math.abs(d.alpha - 0.3) < 1e-6)
         .map((d) => d.layer);
@@ -495,7 +495,7 @@ describe('Parallax, Route, Camera & EventBus Unit Suite', () => {
       // Interrupt toward STORM (dt = 0 -> newP = 0): DUSK@0.3 layers must still render
       parallax.update(0, 0, 'STORM');
       drawCalls.length = 0;
-      parallax.render(ctx, 430, 512);
+      parallax.render(ctx, 680, 412);
       const atInterruptDuskAlphas = drawCalls
         .filter((d) => Math.abs(d.alpha - 0.3) < 1e-6)
         .map((d) => d.layer);

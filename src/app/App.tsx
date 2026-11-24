@@ -33,7 +33,7 @@ import {
   useTurretTiers,
   useWagonCount,
 } from '../store/selectors';
-import type { AdTierLevel, TurretType } from '../store/types';
+import type { AdTierLevel, DailyMissionId, TurretType } from '../store/types';
 import { DebugBar } from '../ui/debug/DebugBar';
 import { adSimulator, AdSimulatorState } from '../game/monetization/AdSimulator';
 import { processRewardedAdRequest } from '../game/monetization/rewardedAds';
@@ -52,7 +52,7 @@ import { MarchNormalState } from '../engine/fsm/states/MarchNormalState';
 import { HazardZoneState } from '../engine/fsm/states/HazardZoneState';
 import { BossEncounterState } from '../engine/fsm/states/BossEncounterState';
 import { EmergencyReviveState } from '../engine/fsm/states/EmergencyReviveState';
-import { OasisSettlementState } from '../engine/fsm/states/OasisSettlementState';
+import { OasisSettlementState, type SettlementBreakdown } from '../engine/fsm/states/OasisSettlementState';
 import { ParallaxSystem } from '../engine/systems/ParallaxSystem';
 import { RouteSystem, getDefaultRouteDefinition } from '../engine/systems/RouteSystem';
 import { CameraSystem } from '../engine/systems/CameraSystem';
@@ -69,15 +69,43 @@ import {
 } from '../engine/systems/DialogueSystem';
 import { ExcavationSystem } from '../engine/systems/ExcavationSystem';
 import { Renderer } from '../engine/render/Renderer';
+import { compileSprite } from '../engine/render/pixel/PixelCanvas';
+import { WORLD_PALETTE } from '../engine/render/pixel/palettes';
+import { RELIC_ICON_MATRICES } from '../engine/render/pixel/sprites/worldSprites';
+import { soundEngine } from '../engine/audio/SoundEngine';
 import type { ParticlePool } from '../engine/render/draw/particles';
 import { MERCENARY_DEFINITIONS, type MercenaryId } from '../game/data/mercenaries';
-import { getOasisDefinition } from '../game/data/oases';
-import { getRelicDefinition, STELE_DEFINITIONS } from '../game/data/relics';
+import { getGoodsDisplayName, getOasisDefinition } from '../game/data/oases';
+import {
+  createInitialDailyMissions,
+  DAILY_MISSION_DEFINITIONS,
+} from '../game/data/dailyMissions';
+import { getTodayDateString } from '../store/defaults';
+import { getRelicDefinition, RELIC_DEFINITIONS, STELE_DEFINITIONS } from '../game/data/relics';
 import { getOpeningPhaseInfo, type OpeningPhaseInfo } from '../game/data/openingScript';
 import { quicksandIgnore, tierUpGearCost, upgradeCost } from '../game/formulas';
 import { triggerHaptic } from '../game/haptics';
 
 type GrowthTab = 'MECH' | 'MERCENARIES' | 'TRADE' | 'RELICS';
+
+const GROWTH_TABS: readonly GrowthTab[] = ['MECH', 'MERCENARIES', 'TRADE', 'RELICS'];
+const WEAKPOINT_HINT_STORAGE_KEY = 'SANDWALKER_WEAKPOINT_HINT_SEEN';
+
+const FSM_STATE_LABELS: Record<GameStateId, string> = {
+  OPENING_HOOK: '오프닝',
+  OASIS_HUB: '오아시스 정비',
+  MARCH_NORMAL: '사막 행군',
+  HAZARD_ZONE: '위험 지대',
+  BOSS_ENCOUNTER: '보스 교전',
+  OASIS_SETTLEMENT: '교역 정산',
+  EMERGENCY_REVIVE: '긴급 수리',
+};
+
+const TURRET_LABELS: Record<TurretType, string> = {
+  HEAT_RAY: '열선',
+  HARPOON: '작살',
+  MORTAR: '박격포',
+};
 
 export interface SandwalkerDebugTelemetry {
   getSnapshot: () => {
@@ -90,6 +118,7 @@ export interface SandwalkerDebugTelemetry {
     relics: ReturnType<typeof useGameStore.getState>['relics'];
     steles: ReturnType<typeof useGameStore.getState>['steles'];
     monetization: ReturnType<typeof useGameStore.getState>['monetization'];
+    dailyMissions?: ReturnType<typeof useGameStore.getState>['dailyMissions'];
     dialogue: DialogueDebugSnapshot;
   };
 }
@@ -97,7 +126,68 @@ export interface SandwalkerDebugTelemetry {
 declare global {
   interface Window {
     __SANDWALKER_DEBUG__?: SandwalkerDebugTelemetry;
+    __SANDWALKER_AUDIO__?: {
+      getStatus: () => ReturnType<typeof soundEngine.getStatus>;
+    };
   }
+}
+
+function formatCountdown(ms: number): string {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+const RELIC_SPRITE_CACHE = new Map<string, ReturnType<typeof compileSprite>>();
+
+function PixelIconCanvas({
+  relicId,
+  size = 22,
+}: {
+  relicId: string;
+  size?: number;
+}): ReactElement {
+  const iconRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = iconRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const matrix = RELIC_ICON_MATRICES[relicId] ?? RELIC_ICON_MATRICES.relic_solar_disc;
+    let compiled = RELIC_SPRITE_CACHE.get(relicId);
+    if (!compiled) {
+      compiled = compileSprite(matrix, WORLD_PALETTE);
+      RELIC_SPRITE_CACHE.set(relicId, compiled);
+    }
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scaleX = canvas.width / Math.max(1, compiled.width);
+    const scaleY = canvas.height / Math.max(1, compiled.height);
+    for (let i = 0; i < compiled.pixels.length; i++) {
+      const p = compiled.pixels[i];
+      ctx.fillStyle = p.color;
+      ctx.fillRect(
+        Math.floor(p.x * scaleX),
+        Math.floor(p.y * scaleY),
+        Math.ceil(scaleX),
+        Math.ceil(scaleY)
+      );
+    }
+  }, [relicId]);
+
+  return (
+    <canvas
+      ref={iconRef}
+      width={20}
+      height={20}
+      className="codex-pixel-thumb"
+      style={{ width: `${size}px`, height: `${size}px` }}
+    />
+  );
 }
 
 interface UiBubbleItem {
@@ -165,11 +255,27 @@ export default function App(): ReactElement {
   );
   const [uiBalloons, setUiBalloons] = useState<UiBubbleItem[]>([]);
   const [settlementProfit, setSettlementProfit] = useState<number>(0);
+  const [settlementBreakdown, setSettlementBreakdown] = useState<SettlementBreakdown | null>(
+    null
+  );
   const [zafar2xClaimed, setZafar2xClaimed] = useState<boolean>(false);
   const [relicAdPending, setRelicAdPending] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(() => soundEngine.isMuted());
+  const [codexNowMs, setCodexNowMs] = useState<number>(() => Date.now());
+  const [saveJsonInput, setSaveJsonInput] = useState<string>('');
+  const [saveBackupStatus, setSaveBackupStatus] = useState<string | null>(null);
+  const [hasUsedWeakPointAim, setHasUsedWeakPointAim] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem(WEAKPOINT_HINT_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
 
   const relayAdPendingRef = useRef<boolean>(false);
   const adSimOpenRef = useRef<boolean>(false);
+  const pointerDragStartRef = useRef<{ x: number; y: number } | null>(null);
 
   // Granular Zustand selectors
   const currentAct = useCurrentAct();
@@ -198,6 +304,10 @@ export default function App(): ReactElement {
   const relicCodexCount = useRelicCodexCount();
   const pendingRelicCount = usePendingRelicCount();
   const pendingRelics = useGameStore((s) => s.relics.pending);
+  const decodedSteles = useGameStore((s) => s.steles.decoded);
+  const relicCodex = useGameStore((s) => s.relics.codex);
+  const dailyMissions = useGameStore((s) => s.dailyMissions);
+  const dailySkipTicketsLeft = useGameStore((s) => s.monetization.dailySkipTicketsLeft);
 
   const switchTurretAction = useGameStore((s) => s.switchTurret);
   const addCurrencies = useGameStore((s) => s.addCurrencies);
@@ -272,6 +382,7 @@ export default function App(): ReactElement {
   useEffect(() => {
     SaveManager.init();
     const loadResult = SaveManager.load();
+    useGameStore.getState().resetDailyMissionsIfNeeded();
 
     if (loadResult && loadResult.meta && loadResult.meta.lastSavedTimestamp) {
       const reward = calculateOfflineReward(
@@ -332,6 +443,9 @@ export default function App(): ReactElement {
     cameraSystemRef.current = cameraSystem;
 
     if (typeof window !== 'undefined') {
+      window.__SANDWALKER_AUDIO__ = {
+        getStatus: () => soundEngine.getStatus(),
+      };
       window.__SANDWALKER_DEBUG__ = {
         getSnapshot: () => {
           const latest = useGameStore.getState();
@@ -364,6 +478,12 @@ export default function App(): ReactElement {
               decoded: [...latest.steles.decoded],
             },
             monetization: { ...latest.monetization },
+            dailyMissions: latest.dailyMissions
+              ? {
+                  ...latest.dailyMissions,
+                  items: latest.dailyMissions.items.map((m) => ({ ...m })),
+                }
+              : undefined,
             dialogue: dialogueSystem.getDebugSnapshot(),
           };
         },
@@ -386,8 +506,33 @@ export default function App(): ReactElement {
       cameraSystem.shake(intensity, duration);
     });
 
+    const unsubAudioSwitch = eventBus.on('turret:switch', () => {
+      soundEngine.play('TURRET_SWITCH');
+    });
+
+    const unsubAudioFire = eventBus.on('turret:fire', ({ turret }) => {
+      if (turret === 'HEAT_RAY') {
+        soundEngine.play('HEAT_RAY');
+      } else if (turret === 'HARPOON') {
+        soundEngine.play('HARPOON');
+      } else {
+        soundEngine.play('MORTAR_EXPLOSION');
+      }
+    });
+
+    const unsubAudioDamage = eventBus.on('damage:dealt', (ev) => {
+      if (ev.isWeakPoint || ev.affinityMultiplier >= 2.0) {
+        soundEngine.play('ARMOR_BREAK');
+      }
+    });
+
     const unsubStateResetAim = eventBus.on('state:change', ({ from, to }) => {
       setIntroSeenState(SaveManager.isIntroSeen());
+      if (to === 'BOSS_ENCOUNTER') {
+        soundEngine.play('BOSS_WARNING');
+      } else if (to === 'OASIS_SETTLEMENT') {
+        soundEngine.play('SETTLEMENT_COIN');
+      }
       if (to === 'OASIS_HUB' || to === 'OASIS_SETTLEMENT' || to === 'EMERGENCY_REVIVE') {
         useGameStore.getState().setManualAimTarget(null);
       }
@@ -400,6 +545,7 @@ export default function App(): ReactElement {
       }
       if (to === 'OASIS_SETTLEMENT') {
         setSettlementProfit(oasisSettlementState.totalProfit);
+        setSettlementBreakdown({ ...oasisSettlementState.breakdown });
         setZafar2xClaimed(false);
       }
       if (to !== 'EMERGENCY_REVIVE') {
@@ -613,6 +759,9 @@ export default function App(): ReactElement {
 
     return () => {
       unsubShake();
+      unsubAudioSwitch();
+      unsubAudioFire();
+      unsubAudioDamage();
       unsubStateResetAim();
       gameLoop.stop();
       combatCoordinator.dispose();
@@ -621,6 +770,9 @@ export default function App(): ReactElement {
       cameraSystemRef.current = null;
       if (typeof window !== 'undefined' && window.__SANDWALKER_DEBUG__) {
         delete window.__SANDWALKER_DEBUG__;
+      }
+      if (typeof window !== 'undefined' && window.__SANDWALKER_AUDIO__) {
+        delete window.__SANDWALKER_AUDIO__;
       }
       renderer.dispose();
     };
@@ -635,6 +787,32 @@ export default function App(): ReactElement {
     dialogueSystem,
     excavationSystem,
   ]);
+
+  useEffect(() => {
+    const unlockOnce = () => {
+      soundEngine.unlock();
+    };
+    window.addEventListener('pointerdown', unlockOnce, { once: true, passive: true });
+    window.addEventListener('keydown', unlockOnce, { once: true, passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockOnce);
+      window.removeEventListener('keydown', unlockOnce);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pendingRelics.length === 0) return;
+    setCodexNowMs(Date.now());
+    const id = window.setInterval(() => {
+      setCodexNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [pendingRelics.length]);
+
+  const handleToggleMute = () => {
+    const next = soundEngine.toggleMute();
+    setIsMuted(next);
+  };
 
   const handleTurretSwitch = (turret: TurretType) => {
     triggerHaptic(10);
@@ -703,6 +881,7 @@ export default function App(): ReactElement {
       e.clientY,
       e.currentTarget.getBoundingClientRect()
     );
+    pointerDragStartRef.current = { x: pt.x, y: pt.y };
     coordinator.onAimPointerDown(pt.x, pt.y, useGameStore.getState().setManualAimTarget);
     setAimReticle(coordinator.getAimReticleOverlay());
   };
@@ -715,15 +894,99 @@ export default function App(): ReactElement {
       e.clientY,
       e.currentTarget.getBoundingClientRect()
     );
+    if (pointerDragStartRef.current && !hasUsedWeakPointAim) {
+      const dist = Math.hypot(
+        pt.x - pointerDragStartRef.current.x,
+        pt.y - pointerDragStartRef.current.y
+      );
+      if (dist > 6) {
+        setHasUsedWeakPointAim(true);
+        try {
+          window.localStorage.setItem(WEAKPOINT_HINT_STORAGE_KEY, '1');
+        } catch {
+          // Ignore storage errors
+        }
+      }
+    }
     coordinator.onAimPointerMove(pt.x, pt.y, useGameStore.getState().setManualAimTarget);
   };
 
   const handleCanvasPointerUp = () => {
+    pointerDragStartRef.current = null;
     const coordinator = combatCoordinatorRef.current;
     if (!coordinator) return;
     coordinator.onAimPointerUp();
     setAimReticle(coordinator.getAimReticleOverlay());
   };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || adSimOpenRef.current) {
+        return;
+      }
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const coordinator = combatCoordinatorRef.current;
+      const store = useGameStore.getState();
+      const stateId = fsm.getCurrentStateId();
+      const combatActive =
+        stateId !== null &&
+        stateId !== 'OASIS_HUB' &&
+        stateId !== 'OASIS_SETTLEMENT' &&
+        stateId !== 'EMERGENCY_REVIVE' &&
+        store.sandwalker.currentHp > 0;
+
+      if (e.key === '1') {
+        handleTurretSwitch('HEAT_RAY');
+      } else if (e.key === '2') {
+        handleTurretSwitch('HARPOON');
+      } else if (e.key === '3') {
+        handleTurretSwitch('MORTAR');
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        if (combatActive && coordinator?.activateDodgeBoost(store, stateId)) {
+          triggerHaptic(18);
+          const ds = coordinator.getDodgeState();
+          setDodgeUi({
+            active: ds.active,
+            cooldownRemainingSec: ds.cooldownRemainingSec,
+            cooldownRatio: ds.cooldownRatio,
+          });
+        }
+      } else if (e.key === 'e' || e.key === 'E' || e.key === '4') {
+        if (combatActive && coordinator?.activateSolarShield(store, store, stateId)) {
+          triggerHaptic(20);
+          const ss = coordinator.getSolarShieldCooldownState();
+          setShieldUi({
+            cooldownRemainingSec: ss.cooldownRemainingSec,
+            cooldownRatio: ss.cooldownRatio,
+          });
+        }
+      } else if (e.key === 'q' || e.key === 'Q') {
+        setActiveTab((prev) => {
+          const idx = GROWTH_TABS.indexOf(prev);
+          return GROWTH_TABS[(idx + GROWTH_TABS.length - 1) % GROWTH_TABS.length];
+        });
+      } else if (e.key === 'r' || e.key === 'R') {
+        setActiveTab((prev) => {
+          const idx = GROWTH_TABS.indexOf(prev);
+          return GROWTH_TABS[(idx + 1) % GROWTH_TABS.length];
+        });
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fsm]);
 
   const claimOfflineReward = (is2x: boolean) => {
     if (!offlineReward) return;
@@ -942,7 +1205,7 @@ export default function App(): ReactElement {
 
   const unlockedMercCount = mercenaries.filter((m) => m.isUnlocked).length;
   const surgePercent = Math.round(nextOasisPriceRate * 100);
-  const hasReadyRelic = pendingRelics.some((r) => r.appraiseEndsAt <= Date.now());
+  const hasReadyRelic = pendingRelics.some((r) => r.appraiseEndsAt <= codexNowMs);
   const isTacticalCombatState =
     currentFsmState !== 'OASIS_HUB' &&
     currentFsmState !== 'OASIS_SETTLEMENT' &&
@@ -952,6 +1215,12 @@ export default function App(): ReactElement {
   return (
     <>
       <DebugBar />
+      <div className="portrait-rotate-hint" data-testid="portrait-rotate-hint">
+        📱 가로 화면으로 회전하면 더 넓게 즐길 수 있습니다
+      </div>
+      <div className="desktop-shortcut-legend" data-testid="desktop-shortcut-legend">
+        [1/2/3] 포탑 · [Space] 회피 · [E] 보호막 · [Q/R] 탭 · 드래그 약점 조준
+      </div>
 
       <div
         className="viewport-shell"
@@ -960,83 +1229,103 @@ export default function App(): ReactElement {
           transform: `translate(-50%, -50%) scale(${scale})`,
         }}
       >
-        {/* ZONE A: HUD Overlay (0 ~ 140px) */}
+        {/* ZONE A: Slim Horizontal Top HUD Bar (960 × 56px) */}
         <section className="zone-a" data-testid="zone-a">
-          <div className="zone-a-route">
-            <span data-testid="hud-oasis-name">
-              [출발] {routeDef.fromOasisName} ➔ [도착] {routeDef.toOasisName}
-            </span>
-            <span data-testid="hud-act-badge" className="hud-act-badge">
-              Act {currentAct}
-            </span>
-          </div>
-
-          <div className="zone-a-progress-wrap">
-            <div className="zone-a-progress-label">
-              <span>행군 진행도</span>
-              <span data-testid="hud-actual-speed" className="hud-actual-speed">
-                {actualSpeedPx} px/s
+          <div className="zone-a-row-top">
+            <div className="zone-a-route">
+              <span data-testid="hud-oasis-name">
+                [출발] {routeDef.fromOasisName} ➔ [도착] {routeDef.toOasisName}
               </span>
-              <span data-testid="hud-route-progress">
-                {routeProgress.toFixed(1)}% (
-                {Math.round((routeProgress / 100) * routeDef.routeLengthPx)}m /{' '}
-                {routeDef.routeLengthPx.toLocaleString()}m)
+              <span data-testid="hud-act-badge" className="hud-act-badge">
+                Act {currentAct}
               </span>
             </div>
-            <div className="zone-a-progress-bar">
-              <div
-                className="zone-a-progress-fill"
-                style={{ width: `${routeProgress}%` }}
-              />
+
+            <div className="zone-a-progress-wrap">
+              <div className="zone-a-progress-label">
+                <span>행군</span>
+                <span data-testid="hud-actual-speed" className="hud-actual-speed">
+                  {actualSpeedPx} px/s
+                </span>
+                <span data-testid="hud-route-progress">
+                  {routeProgress.toFixed(1)}% (
+                  {Math.round((routeProgress / 100) * routeDef.routeLengthPx)}m /{' '}
+                  {routeDef.routeLengthPx.toLocaleString()}m)
+                </span>
+              </div>
+              <div className="zone-a-progress-bar">
+                <div
+                  className="zone-a-progress-fill"
+                  style={{ width: `${routeProgress}%` }}
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="zone-a-hp-row">
-            <span data-testid="hud-sandwalker-hp" className="hud-sandwalker-hp">
-              HP {Math.round(hpStatus.currentHp)}/{hpStatus.maxHp}
-            </span>
-            <span data-testid="hud-solar-shield" className="hud-solar-shield">
-              🛡️ {Math.round(hpStatus.solarShieldHp)}
-            </span>
-            <div className="zone-a-hp-bar">
-              <div
-                className="zone-a-hp-fill"
-                style={{
-                  width: `${Math.max(0, Math.min(100, hpStatus.hpPercent))}%`,
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="zone-a-currencies">
-            <span data-testid="hud-currency-gold">🪙 {sunGold.toLocaleString()} G</span>
-            <span data-testid="hud-currency-gears">⚙️ {ancientGear}</span>
-            <span data-testid="hud-currency-fragments" className="hud-currency-fragments">
-              🗺️ {mapFragments}/10
-            </span>
-            <span data-testid="hud-currency-keys">🗝️ {templeKeys}/3</span>
-          </div>
-
-          <div className="zone-a-badges">
-            <span className="badge badge-surge" data-testid="hud-surge-badge">
-              시세 +{surgePercent}%
-            </span>
-            <span className="badge badge-tier" data-testid="hud-ad-tier-badge">
-              VIP T{adTier}
-            </span>
-            {synergyActive && (
-              <span className="badge badge-synergy" data-testid="hud-synergy-badge">
-                ✦ 결속 +25%ATK/+20%G
+            <div className="zone-a-hp-row">
+              <span data-testid="hud-sandwalker-hp" className="hud-sandwalker-hp">
+                HP {Math.round(hpStatus.currentHp)}/{hpStatus.maxHp}
               </span>
-            )}
-            <span className="badge badge-fsm" data-testid="hud-fsm-badge">
-              {currentFsmState}
-            </span>
+              <span data-testid="hud-solar-shield" className="hud-solar-shield">
+                🛡️ {Math.round(hpStatus.solarShieldHp)}
+              </span>
+              <div className="zone-a-hp-bar">
+                <div
+                  className="zone-a-hp-fill"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, hpStatus.hpPercent))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="zone-a-row-bottom">
+            <div className="zone-a-currencies">
+              <span data-testid="hud-currency-gold">🪙 {sunGold.toLocaleString()} G</span>
+              <span data-testid="hud-currency-gears">⚙️ {ancientGear}</span>
+              <span data-testid="hud-currency-fragments" className="hud-currency-fragments">
+                🗺️ {mapFragments}/10
+              </span>
+              <span data-testid="hud-currency-keys">🗝️ {templeKeys}/3</span>
+            </div>
+
+            <div className="zone-a-badges">
+              <span className="badge badge-surge" data-testid="hud-surge-badge">
+                시세 +{surgePercent}%
+              </span>
+              <span className="badge badge-tier" data-testid="hud-ad-tier-badge">
+                VIP T{adTier}
+              </span>
+              {synergyActive && (
+                <span className="badge badge-synergy" data-testid="hud-synergy-badge">
+                  ✦ 결속 +25%ATK/+20%G
+                </span>
+              )}
+              <span
+                className="badge badge-fsm"
+                data-testid="hud-fsm-badge"
+                data-fsm-state={currentFsmState}
+              >
+                {FSM_STATE_LABELS[currentFsmState as GameStateId] ?? currentFsmState}
+              </span>
+              <button
+                type="button"
+                className="hud-mute-btn"
+                data-testid="hud-mute-btn"
+                aria-label={isMuted ? '효과음 켜기' : '효과음 끄기'}
+                onClick={handleToggleMute}
+              >
+                {isMuted ? '🔇' : '🔊'}
+              </button>
+            </div>
           </div>
         </section>
 
-        {/* ZONE B: Canvas 2D Battlefield (140 ~ 652px) */}
-        <section className="zone-b" data-testid="zone-b">
+        {/* Main L-Shape Body: Left (Battlefield + Tactical Bar) & Right (Growth Panel) */}
+        <div className="viewport-body">
+          <div className="landscape-main">
+            {/* ZONE B: Canvas 2D Battlefield (680 × 412px) */}
+            <section className="zone-b" data-testid="zone-b">
           <canvas
             ref={canvasRef}
             className="zone-b-canvas"
@@ -1088,12 +1377,21 @@ export default function App(): ReactElement {
                   ⚡ 전탄 과부하 발동
                 </button>
               )}
+              {openingPhaseInfo.phase === 2 && (
+                <button
+                  data-testid="emergency-escape-btn"
+                  className="emergency-escape-btn"
+                  onClick={() => openingHookState.triggerEmergencyEscape(fsm)}
+                >
+                  ⚡ 긴급 탈출 기동
+                </button>
+              )}
               {openingPhaseInfo.phase === 3 && (
                 <div
                   data-testid="tutorial-turret-prompt"
                   className="tutorial-turret-prompt"
                 >
-                  💡 우측 하단 [2] 작살 버튼을 눌러 중장갑 적을 제압하세요!
+                  💡 하단 [2] 작살 버튼을 눌러 중장갑 적을 제압하세요!
                 </div>
               )}
               {introSeenState && (
@@ -1133,6 +1431,14 @@ export default function App(): ReactElement {
             </div>
           )}
 
+          {!hasUsedWeakPointAim &&
+            (currentFsmState === 'MARCH_NORMAL' || currentFsmState === 'BOSS_ENCOUNTER') &&
+            !relayBannerVisible && (
+              <div data-testid="weakpoint-aim-hint" className="weakpoint-aim-hint">
+                🎯 적의 붉은 약점을 드래그해 조준하면 치명타 2.0x!
+              </div>
+            )}
+
           {currentFsmState === 'BOSS_ENCOUNTER' && bossHud && (
             <div data-testid="boss-hud" className="boss-hud">
               <div className="boss-hud-header">
@@ -1140,6 +1446,15 @@ export default function App(): ReactElement {
                   {bossHud.name}
                 </span>
                 <div className="boss-hud-badges">
+                  {bossHud.specialKind && (
+                    <span data-testid="boss-special-badge" className="boss-special-badge">
+                      {bossHud.specialKind === 'SMOKE_RUSH'
+                        ? '연막 돌진'
+                        : bossHud.specialKind === 'VENOM_BARRAGE'
+                          ? '독침 광역기'
+                          : '분신 스왑'}
+                    </span>
+                  )}
                   {bossHud.isGroggy && (
                     <span data-testid="boss-groggy-badge" className="boss-groggy-badge">
                       ⚡ GROGGY
@@ -1197,106 +1512,109 @@ export default function App(): ReactElement {
               )}
             </div>
           )}
-        </section>
+            </section>
 
-        {/* ZONE C: Tactical & Growth Dashboard (652 ~ 932px) */}
-        <section className="zone-c" data-testid="zone-c">
-          {/* Row 1: Tactical Intervention Bar */}
-          <div className="zone-c-tactical">
-            <button
-              data-testid="turret-btn-heat-ray"
-              className={`turret-btn ${activeTurret === 'HEAT_RAY' ? 'active' : ''}`}
-              onClick={() => handleTurretSwitch('HEAT_RAY')}
-            >
-              <span>[1] 열선</span>
-              <span style={{ fontSize: '9px', opacity: 0.8 }}>코어/정령 2.0x</span>
-              {turretSwitchCdRatio > 0 && (
-                <span
-                  data-testid="turret-cooldown-badge"
-                  className="turret-btn-cooldown-bar"
-                  style={{ width: `${Math.round(turretSwitchCdRatio * 100)}%` }}
-                />
-              )}
-            </button>
-            <button
-              data-testid="turret-btn-harpoon"
-              className={`turret-btn ${activeTurret === 'HARPOON' ? 'active' : ''}`}
-              onClick={() => handleTurretSwitch('HARPOON')}
-            >
-              <span>[2] 작살</span>
-              <span style={{ fontSize: '9px', opacity: 0.8 }}>장갑/외피 2.2x</span>
-              {turretSwitchCdRatio > 0 && (
-                <span
-                  data-testid="turret-cooldown-badge"
-                  className="turret-btn-cooldown-bar"
-                  style={{ width: `${Math.round(turretSwitchCdRatio * 100)}%` }}
-                />
-              )}
-            </button>
-            <button
-              data-testid="turret-btn-mortar"
-              className={`turret-btn ${activeTurret === 'MORTAR' ? 'active' : ''}`}
-              onClick={() => handleTurretSwitch('MORTAR')}
-            >
-              <span>[3] 박격포</span>
-              <span style={{ fontSize: '9px', opacity: 0.8 }}>군집/기생 2.2x</span>
-              {turretSwitchCdRatio > 0 && (
-                <span
-                  data-testid="turret-cooldown-badge"
-                  className="turret-btn-cooldown-bar"
-                  style={{ width: `${Math.round(turretSwitchCdRatio * 100)}%` }}
-                />
-              )}
-            </button>
-            <button
-              className={`action-btn dodge ${dodgeUi.active ? 'active' : ''}`}
-              data-testid="dodge-boost-btn"
-              data-active={dodgeUi.active ? 'true' : 'false'}
-              data-cooldown={formatCooldownSec(dodgeUi.cooldownRemainingSec)}
-              disabled={
-                !isTacticalCombatState ||
-                dodgeUi.active ||
-                dodgeUi.cooldownRemainingSec > 0
-              }
-              onClick={handleDodgeBoost}
-            >
-              <span>
-                {dodgeUi.active
-                  ? '회피 중!'
-                  : dodgeUi.cooldownRemainingSec > 0
-                    ? `회피 ${formatCooldownSec(dodgeUi.cooldownRemainingSec)}s`
-                    : '회피'}
-              </span>
-              {dodgeUi.cooldownRatio > 0 && (
-                <span
-                  className="turret-btn-cooldown-bar"
-                  style={{ width: `${Math.round(dodgeUi.cooldownRatio * 100)}%` }}
-                />
-              )}
-            </button>
-            <button
-              className={`action-btn shield ${hpStatus.solarShieldHp > 0 ? 'active' : ''}`}
-              data-testid="solar-shield-btn"
-              data-active={hpStatus.solarShieldHp > 0 ? 'true' : 'false'}
-              data-cooldown={formatCooldownSec(shieldUi.cooldownRemainingSec)}
-              disabled={!isTacticalCombatState || shieldUi.cooldownRemainingSec > 0}
-              onClick={handleSolarShield}
-            >
-              <span>
-                {shieldUi.cooldownRemainingSec > 0
-                  ? `보호막 ${formatCooldownSec(shieldUi.cooldownRemainingSec)}s`
-                  : '보호막'}
-              </span>
-              {shieldUi.cooldownRatio > 0 && (
-                <span
-                  className="turret-btn-cooldown-bar"
-                  style={{ width: `${Math.round(shieldUi.cooldownRatio * 100)}%` }}
-                />
-              )}
-            </button>
+            {/* Zone C-1: Tactical Intervention Bar (680 × 72px) */}
+            <div className="zone-c-tactical" data-testid="zone-c-tactical">
+              <button
+                data-testid="turret-btn-heat-ray"
+                className={`turret-btn ${activeTurret === 'HEAT_RAY' ? 'active' : ''}`}
+                onClick={() => handleTurretSwitch('HEAT_RAY')}
+              >
+                <span>[1] 열선</span>
+                <span className="turret-sub-label">코어/정령 2.0x</span>
+                {turretSwitchCdRatio > 0 && (
+                  <span
+                    data-testid="turret-cooldown-badge"
+                    className="turret-btn-cooldown-bar"
+                    style={{ width: `${Math.round(turretSwitchCdRatio * 100)}%` }}
+                  />
+                )}
+              </button>
+              <button
+                data-testid="turret-btn-harpoon"
+                className={`turret-btn ${activeTurret === 'HARPOON' ? 'active' : ''}`}
+                onClick={() => handleTurretSwitch('HARPOON')}
+              >
+                <span>[2] 작살</span>
+                <span className="turret-sub-label">장갑/외피 2.2x</span>
+                {turretSwitchCdRatio > 0 && (
+                  <span
+                    data-testid="turret-cooldown-badge"
+                    className="turret-btn-cooldown-bar"
+                    style={{ width: `${Math.round(turretSwitchCdRatio * 100)}%` }}
+                  />
+                )}
+              </button>
+              <button
+                data-testid="turret-btn-mortar"
+                className={`turret-btn ${activeTurret === 'MORTAR' ? 'active' : ''}`}
+                onClick={() => handleTurretSwitch('MORTAR')}
+              >
+                <span>[3] 박격포</span>
+                <span className="turret-sub-label">군집/기생 2.2x</span>
+                {turretSwitchCdRatio > 0 && (
+                  <span
+                    data-testid="turret-cooldown-badge"
+                    className="turret-btn-cooldown-bar"
+                    style={{ width: `${Math.round(turretSwitchCdRatio * 100)}%` }}
+                  />
+                )}
+              </button>
+              <button
+                className={`action-btn dodge ${dodgeUi.active ? 'active' : ''}`}
+                data-testid="dodge-boost-btn"
+                data-active={dodgeUi.active ? 'true' : 'false'}
+                data-cooldown={formatCooldownSec(dodgeUi.cooldownRemainingSec)}
+                disabled={
+                  !isTacticalCombatState ||
+                  dodgeUi.active ||
+                  dodgeUi.cooldownRemainingSec > 0
+                }
+                onClick={handleDodgeBoost}
+              >
+                <span>
+                  {dodgeUi.active
+                    ? '회피 중!'
+                    : dodgeUi.cooldownRemainingSec > 0
+                      ? `회피 ${formatCooldownSec(dodgeUi.cooldownRemainingSec)}s`
+                      : '회피'}
+                </span>
+                <span className="turret-sub-label">[Space]</span>
+                {dodgeUi.cooldownRatio > 0 && (
+                  <span
+                    className="turret-btn-cooldown-bar"
+                    style={{ width: `${Math.round(dodgeUi.cooldownRatio * 100)}%` }}
+                  />
+                )}
+              </button>
+              <button
+                className={`action-btn shield ${hpStatus.solarShieldHp > 0 ? 'active' : ''}`}
+                data-testid="solar-shield-btn"
+                data-active={hpStatus.solarShieldHp > 0 ? 'true' : 'false'}
+                data-cooldown={formatCooldownSec(shieldUi.cooldownRemainingSec)}
+                disabled={!isTacticalCombatState || shieldUi.cooldownRemainingSec > 0}
+                onClick={handleSolarShield}
+              >
+                <span>
+                  {shieldUi.cooldownRemainingSec > 0
+                    ? `보호막 ${formatCooldownSec(shieldUi.cooldownRemainingSec)}s`
+                    : '보호막'}
+                </span>
+                <span className="turret-sub-label">[E]</span>
+                {shieldUi.cooldownRatio > 0 && (
+                  <span
+                    className="turret-btn-cooldown-bar"
+                    style={{ width: `${Math.round(shieldUi.cooldownRatio * 100)}%` }}
+                  />
+                )}
+              </button>
+            </div>
           </div>
 
-          {/* Row 2: Growth Tabs Header */}
+          {/* ZONE C: Right Growth Dashboard Side Panel (280 × 484px) */}
+          <section className="zone-c" data-testid="zone-c">
+            {/* Row 2: Growth Tabs Header */}
           <div className="zone-c-tabs">
             <button
               data-testid="tab-btn-mech"
@@ -1325,6 +1643,9 @@ export default function App(): ReactElement {
               onClick={() => setActiveTab('RELICS')}
             >
               유물·비석 도감
+              {hasReadyRelic && (
+                <span data-testid="codex-ready-dot" className="codex-ready-dot" />
+              )}
             </button>
           </div>
 
@@ -1336,32 +1657,37 @@ export default function App(): ReactElement {
                   className="card-title"
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 >
-                  <span>기체 개조 (Mech Modification)</span>
-                  <button
-                    data-testid="btn-equip-skin-pharaoh"
-                    className={`dash-btn ${equippedSkinId === 'GOLDEN_PHARAOH' ? 'skin-active' : 'secondary'}`}
-                    onClick={() => {
-                      triggerHaptic(12);
-                      useGameStore
-                        .getState()
-                        .setSkin(
-                          equippedSkinId === 'GOLDEN_PHARAOH'
-                            ? 'DEFAULT'
-                            : 'GOLDEN_PHARAOH'
-                        );
-                    }}
-                  >
-                    {equippedSkinId === 'GOLDEN_PHARAOH'
-                      ? '👑 황금 파라오 장착 중'
-                      : '👑 황금 파라오 스킨'}
-                  </button>
+                  <span>기체 개조</span>
+                  <div className="dash-actions">
+                    <span className="dash-sub">
+                      {adTier >= 3 ? 'VIP T3 영구 특전' : 'VIP T3 특전'}
+                    </span>
+                    <button
+                      data-testid="btn-equip-skin-pharaoh"
+                      className={`dash-btn ${equippedSkinId === 'GOLDEN_PHARAOH' ? 'skin-active' : 'secondary'}`}
+                      onClick={() => {
+                        triggerHaptic(12);
+                        useGameStore
+                          .getState()
+                          .setSkin(
+                            equippedSkinId === 'GOLDEN_PHARAOH'
+                              ? 'DEFAULT'
+                              : 'GOLDEN_PHARAOH'
+                          );
+                      }}
+                    >
+                      {equippedSkinId === 'GOLDEN_PHARAOH'
+                        ? '👑 황금 파라오 장착 중'
+                        : '👑 황금 파라오 스킨'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Active Turret Row */}
                 <div className="dash-row">
                   <div className="dash-info">
                     <div>
-                      <strong>주포 [{activeTurret}]</strong>{' '}
+                      <strong>주포 [{TURRET_LABELS[activeTurret]}]</strong>{' '}
                       <span data-testid="turret-level-text">Lv.{activeTurretLv}</span> /{' '}
                       <span data-testid="turret-tier-text">Tier {activeTurretTier}</span>
                     </div>
@@ -1631,6 +1957,62 @@ export default function App(): ReactElement {
                     </button>
                   </div>
                 </div>
+
+                <div className="codex-section-title">교역 로테이션 품목</div>
+                <div data-testid="trade-rotation-list" className="trade-rotation-list">
+                  {oasisDef.secondaryGoods.map((good) => {
+                    const remainingSpace = Math.max(0, cargoCapacity - usedCargoUnits);
+                    const canBuyOne = remainingSpace >= 1 && sunGold >= good.buyPrice;
+                    const canBuyFive = remainingSpace >= 5 && sunGold >= good.buyPrice * 5;
+                    return (
+                      <div
+                        key={good.id}
+                        data-testid={`trade-good-${good.id}`}
+                        className="trade-rotation-row"
+                      >
+                        <div className="dash-info">
+                          <strong>{good.name}</strong>
+                          <span className="dash-sub">{good.buyPrice}G · {good.description}</span>
+                        </div>
+                        <div className="dash-actions">
+                          <button
+                            data-testid={`btn-buy-good-${good.id}`}
+                            className="dash-btn"
+                            disabled={!canBuyOne}
+                            onClick={() => {
+                              if (useGameStore.getState().buyCargo(good.id, 1, good.buyPrice)) {
+                                triggerHaptic(12);
+                              }
+                            }}
+                          >
+                            +1
+                          </button>
+                          <button
+                            data-testid={`btn-buy-good-5-${good.id}`}
+                            className="dash-btn secondary"
+                            disabled={!canBuyFive}
+                            onClick={() => {
+                              if (useGameStore.getState().buyCargo(good.id, 5, good.buyPrice)) {
+                                triggerHaptic(15);
+                              }
+                            }}
+                          >
+                            +5
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {cargo.length > 0 && (
+                  <div data-testid="trade-cargo-summary" className="dash-sub">
+                    선적 중:{' '}
+                    {cargo
+                      .map((item) => `${getGoodsDisplayName(item.goodsId)} ${item.qty}개`)
+                      .join(' · ')}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1648,6 +2030,24 @@ export default function App(): ReactElement {
                   {pendingRelics.length > 0 &&
                     ` · 첫 상자: ${getRelicDefinition(pendingRelics[0].id).name}`}
                 </div>
+
+                {pendingRelics.length > 0 && (
+                  <div className="dash-actions" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                    {pendingRelics.map((pr, idx) => {
+                      const def = getRelicDefinition(pr.id);
+                      const remMs = Math.max(0, pr.appraiseEndsAt - codexNowMs);
+                      return (
+                        <div key={`${pr.id}_${idx}`} className="codex-pending-row">
+                          <span>📦 {def.name}</span>
+                          <span data-testid="relic-countdown" className="codex-timer-pill">
+                            {remMs <= 0 ? '수령 가능!' : formatCountdown(remMs)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="dash-actions">
                   <button
                     data-testid="btn-appraise-relic"
@@ -1666,10 +2066,154 @@ export default function App(): ReactElement {
                     ⚡ 광고 즉시 감정 (+5⚙️)
                   </button>
                 </div>
+
+                <div className="codex-section-title">고대 유물 ({relicCodexCount} / {RELIC_DEFINITIONS.length})</div>
+                <div className="codex-relic-grid">
+                  {RELIC_DEFINITIONS.map((def) => {
+                    const unlocked = relicCodex.includes(def.id);
+                    return (
+                      <div
+                        key={def.id}
+                        data-testid={`relic-card-${def.id}`}
+                        className={`codex-relic-card ${unlocked ? 'unlocked' : 'locked'}`}
+                      >
+                        <PixelIconCanvas relicId={def.id} size={22} />
+                        <div>
+                          <div style={{ fontWeight: 700, color: unlocked ? '#fef08a' : '#a0aec0' }}>
+                            {unlocked ? def.name : '???'}
+                          </div>
+                          <div style={{ opacity: 0.8 }}>
+                            {unlocked ? def.description : '사막 발굴로 해금'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="codex-section-title">고대 비석 ({decodedSteleCount} / {STELE_DEFINITIONS.length})</div>
+                <div className="codex-stele-list">
+                  {STELE_DEFINITIONS.map((st) => {
+                    const decoded = decodedSteles.includes(st.id);
+                    return (
+                      <div
+                        key={st.id}
+                        data-testid={`stele-item-${st.id}`}
+                        className={`codex-stele-row ${decoded ? 'decoded' : ''}`}
+                      >
+                        <div style={{ fontWeight: 700, color: decoded ? '#68d391' : '#a0aec0' }}>
+                          {decoded ? st.title : `비석 ${st.id}: ??? (미해독)`}
+                        </div>
+                        {decoded && (
+                          <div className="codex-stele-inscription">"{st.inscription}"</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="codex-section-title">
+                  일일 미션 (보유 스킵권: <span data-testid="daily-skip-tickets-count">{dailySkipTicketsLeft}</span>장)
+                </div>
+                <div data-testid="daily-missions-panel" className="daily-mission-list">
+                  {DAILY_MISSION_DEFINITIONS.map((def) => {
+                    const currentMissions =
+                      dailyMissions ?? createInitialDailyMissions(getTodayDateString());
+                    const item = currentMissions.items.find((m) => m.id === def.id);
+                    const progress = Math.min(def.target, item?.progress ?? 0);
+                    const claimed = Boolean(item?.claimed);
+                    const canClaim = !claimed && progress >= def.target;
+                    return (
+                      <div
+                        key={def.id}
+                        data-testid={`daily-mission-${def.id}`}
+                        className={`daily-mission-row ${claimed ? 'claimed' : ''}`}
+                      >
+                        <div className="dash-info">
+                          <strong>
+                            {def.title} ({progress}/{def.target})
+                          </strong>
+                          <span className="dash-sub">
+                            {def.description} · 보상: 🎫+{def.reward.skipTickets} ⚙️+{def.reward.ancientGear} 🪙+{def.reward.sunGold}
+                          </span>
+                        </div>
+                        <button
+                          data-testid={`btn-claim-mission-${def.id}`}
+                          className="dash-btn"
+                          disabled={!canClaim}
+                          onClick={() => {
+                            if (
+                              useGameStore
+                                .getState()
+                                .claimDailyMission(def.id as DailyMissionId)
+                            ) {
+                              triggerHaptic(20);
+                            }
+                          }}
+                        >
+                          {claimed ? '수령 완료' : canClaim ? '보상 수령' : '진행 중'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="codex-section-title">세이브 JSON 백업</div>
+                <div data-testid="save-backup-panel" className="save-backup-panel">
+                  <div className="dash-actions">
+                    <button
+                      type="button"
+                      data-testid="btn-export-save"
+                      className="dash-btn secondary"
+                      onClick={() => {
+                        const json = SaveManager.exportSaveJson();
+                        setSaveJsonInput(json);
+                        setSaveBackupStatus('세이브 JSON이 생성되었습니다.');
+                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                          navigator.clipboard.writeText(json).catch(() => {});
+                        }
+                      }}
+                    >
+                      📤 내보내기
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="btn-import-save"
+                      className="dash-btn"
+                      onClick={() => {
+                        const res = SaveManager.importSaveJson(saveJsonInput);
+                        setSaveBackupStatus(
+                          res.success
+                            ? '세이브 불러오기 완료!'
+                            : res.error ?? '세이브 불러오기에 실패했습니다.'
+                        );
+                        if (res.success) {
+                          triggerHaptic(20);
+                        }
+                      }}
+                    >
+                      📥 가져오기
+                    </button>
+                  </div>
+                  <textarea
+                    data-testid="save-json-textarea"
+                    className="save-json-textarea"
+                    rows={3}
+                    placeholder="내보내기 버튼으로 생성된 JSON 또는 백업 JSON을 붙여넣으세요"
+                    value={saveJsonInput}
+                    onChange={(e) => setSaveJsonInput(e.target.value)}
+                  />
+                  {saveBackupStatus && (
+                    <div data-testid="save-backup-status" className="dash-sub">
+                      {saveBackupStatus}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
-        </section>
+          </section>
+        </div>
 
         {/* Modal: Oasis Arrival Settlement */}
         {currentFsmState === 'OASIS_SETTLEMENT' && (
@@ -1687,11 +2231,37 @@ export default function App(): ReactElement {
                     fontSize: '24px',
                     fontWeight: 'bold',
                     color: '#ecc94b',
-                    margin: '10px 0',
+                    margin: '8px 0',
                   }}
                 >
                   +{settlementProfit.toLocaleString()} G
                 </div>
+                {settlementBreakdown && (
+                  <div data-testid="settlement-receipt" className="settlement-receipt">
+                    <div className="settlement-receipt-row">
+                      <span>매각 화물 / 원가</span>
+                      <span>
+                        {settlementBreakdown.cargoUnits}개 ({settlementBreakdown.purchaseCost.toLocaleString()}G)
+                      </span>
+                    </div>
+                    <div className="settlement-receipt-row">
+                      <span>오아시스 시세 배율</span>
+                      <span>{Math.round(settlementBreakdown.priceRate * 100)}%</span>
+                    </div>
+                    <div className="settlement-receipt-row">
+                      <span>하룬 상인 보너스</span>
+                      <span>{settlementBreakdown.harunUnlocked ? '+25%' : '미적용'}</span>
+                    </div>
+                    <div className="settlement-receipt-row">
+                      <span>5인 결속 시너지</span>
+                      <span>{settlementBreakdown.synergyActive ? '+20%' : '미적용'}</span>
+                    </div>
+                    <div className="settlement-receipt-row total">
+                      <span>최종 정산 수익</span>
+                      <span>+{settlementProfit.toLocaleString()} G</span>
+                    </div>
+                  </div>
+                )}
                 <div style={{ fontSize: '11px', color: '#a0aec0', marginBottom: '6px' }}>
                   실시간 VIP 광고 패스 전환 (현재 T{adTier})
                 </div>

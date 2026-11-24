@@ -109,7 +109,7 @@ export class ExcavationSystem {
             id: `stele_node_${this.nextNodeId++}`,
             kind: 'STELE',
             steleId: nextStele.id,
-            x: 420,
+            x: 665,
             y: WALKER_GROUND_Y,
             durationSec: BASE_EXCAVATE_SEC,
           });
@@ -120,7 +120,7 @@ export class ExcavationSystem {
             id: `relic_node_${this.nextNodeId++}`,
             kind: 'RELIC_CHEST',
             relicId: def.id,
-            x: 420,
+            x: 665,
             y: WALKER_GROUND_Y,
             durationSec: BASE_EXCAVATE_SEC,
           });

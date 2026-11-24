@@ -37,7 +37,7 @@ export function drawSpeechBubbles(
     ctx.globalAlpha = b.alpha;
     const boxX = b.x;
     const boxY = b.y;
-    const boxW = 398;
+    const boxW = 648;
     const lineCount = b.lines.length;
     const boxH = lineCount === 1 ? 26 : 38;
 
