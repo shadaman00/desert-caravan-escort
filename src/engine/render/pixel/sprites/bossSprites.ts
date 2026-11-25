@@ -3,6 +3,7 @@ import {
   compileSprite,
   drawBresenhamLine,
   drawCompiledSprite,
+  drawPixelGroundShadow,
   PIXEL_UPSCALE,
   type CompiledPixelSprite,
 } from '../PixelCanvas';
@@ -114,11 +115,30 @@ const BOSS_CACHE = {
   WORM_CORE_FLASH: compileSprite(SANDWORM_CORE_MATRIX, BOSS_PALETTE, { flashWhite: true }),
 };
 
-const CLONE_SPRITE = compileSprite(MIRAGE_KING_MATRIX, {
-  ...BOSS_PALETTE,
-  Y: '#7dd3fc',
-  W: '#bae6fd',
-});
+// Compact 14 x 15 Mirage Clone rendered cleanly at PIXEL_UPSCALE(2)
+const CLONE_SPRITE = compileSprite(
+  [
+    '.....KCCK.....',
+    '....KCWWCK....',
+    '...KPPCCPPK...',
+    '..KPPCCCCPPK..',
+    '.KPPCWWWWCPPK.',
+    'KPPWCWWWWCWPPK',
+    'KPPWCWCCWCWPPK',
+    'KPPWCWWWWCWPPK',
+    '.KPPCWWWWCPPK.',
+    '..KPPCCCCPPK..',
+    '...KPPPPPPK...',
+    '....KPKKPK....',
+    '...KPK..KPK...',
+    '..KCK....KCK..',
+  ],
+  {
+    ...BOSS_PALETTE,
+    Y: '#7dd3fc',
+    W: '#e0f2fe',
+  }
+);
 
 const PARASITE_SPRITE = compileSprite(
   [
@@ -172,13 +192,16 @@ function drawBossAdds(
     if (!add.alive) continue;
 
     if (add.kind === 'MIRAGE_CLONE') {
+      drawPixelGroundShadow(ctx, add.x, add.y + 18, 12, 2, 0.20);
       ctx.save();
-      ctx.globalAlpha = 0.65;
-      drawCompiledSprite(ctx, CLONE_SPRITE, add.x, add.y, { pixelSize: 1 });
+      ctx.globalAlpha = 0.72;
+      drawCompiledSprite(ctx, CLONE_SPRITE, add.x, add.y, { pixelSize: px });
       ctx.restore();
     } else if (add.kind === 'PARASITE') {
+      drawPixelGroundShadow(ctx, add.x, add.y + 8, 9, 2, 0.28);
       drawCompiledSprite(ctx, PARASITE_SPRITE, add.x, add.y, { pixelSize: px });
     } else {
+      drawPixelGroundShadow(ctx, add.x, add.y + 8, 8, 2, 0.28);
       drawCompiledSprite(ctx, SWARM_SPRITE, add.x, add.y, { pixelSize: px });
     }
 
@@ -195,38 +218,52 @@ function drawBossAdds(
 export function drawPixelBoss(
   ctx: CanvasRenderingContext2D,
   boss: BossRenderSnapshot | null,
-  manualAimTargetId: string | null,
+  _manualAimTargetId: string | null,
   timeSec: number
 ): void {
   if (!boss) return;
   const px = PIXEL_UPSCALE;
 
-  // Undulating Sandworm body segments behind head
+  // Boss floor contact shadow
+  drawPixelGroundShadow(
+    ctx,
+    boss.x,
+    boss.id === 'MIRAGE_SPIRIT_KING' ? boss.y + 40 : boss.y + boss.radius - 6,
+    boss.radius * 1.15,
+    5,
+    boss.id === 'MIRAGE_SPIRIT_KING' ? 0.22 : 0.34
+  );
+
+  // Undulating Sandworm body segments behind head with crisp obsidian outline & dorsal ridge highlight
   if (boss.id === 'GREAT_SANDWORM') {
     const isCoreOpen = boss.phase >= 2 || boss.armor <= 0;
     for (let s = 5; s >= 1; s--) {
       const sx = Math.round((boss.x + s * 22) / px) * px;
       const sy = Math.round((boss.y + 4 + Math.sin(timeSec * 4 - s * 0.8) * 6) / px) * px;
       const half = Math.max(10, 24 - s * 2);
+
+      drawPixelGroundShadow(ctx, sx, sy + half + 2, half * 0.9, 3, 0.28);
+
+      // Outer 2px obsidian outline
+      ctx.fillStyle = '#0f1219';
+      ctx.fillRect(sx - half - px, sy - half - px, half * 2 + px * 2, half * 2 + px * 2);
+
+      // Armored segment hull
       ctx.fillStyle = isCoreOpen ? '#9b2c2c' : '#744210';
       ctx.fillRect(sx - half, sy - half, half * 2, half * 2);
-      ctx.fillStyle = isCoreOpen ? '#f6ad55' : '#b7791f';
-      ctx.fillRect(sx - half + 4, sy - half + 4, half * 2 - 8, 6);
-    }
-  }
 
-  // Telegraph stepped warning line
-  if (boss.telegraphActive) {
-    drawBresenhamLine(
-      ctx,
-      boss.x + boss.weakPointOffset.x,
-      boss.y + boss.weakPointOffset.y,
-      268,
-      276,
-      px,
-      '#e53e3e',
-      1
-    );
+      // Mid dorsal band
+      ctx.fillStyle = isCoreOpen ? '#dd6b20' : '#d69e2e';
+      ctx.fillRect(sx - half + px, sy - half + px * 2, half * 2 - px * 2, px * 3);
+
+      // Bright top rim crest
+      ctx.fillStyle = isCoreOpen ? '#fef08a' : '#ecc94b';
+      ctx.fillRect(sx - half + px * 2, sy - half, half * 2 - px * 4, px);
+
+      // Segment seam shadow notch
+      ctx.fillStyle = '#0f1219';
+      ctx.fillRect(sx - half, sy - half + px * 5, px, half * 2 - px * 6);
+    }
   }
 
   const sprite = selectBossSprite(boss);
@@ -279,13 +316,5 @@ export function drawPixelBoss(
     }
   }
 
-  if (manualAimTargetId && boss.targetId === manualAimTargetId) {
-    ctx.fillStyle = '#ecc94b';
-    ctx.fillRect(wpX - 10, wpY - 10, 6, 2);
-    ctx.fillRect(wpX + 6, wpY - 10, 6, 2);
-    ctx.fillRect(wpX - 10, wpY + 8, 6, 2);
-    ctx.fillRect(wpX + 6, wpY + 8, 6, 2);
-  }
-
-  drawBossAdds(ctx, boss.adds, manualAimTargetId);
+  drawBossAdds(ctx, boss.adds, _manualAimTargetId);
 }

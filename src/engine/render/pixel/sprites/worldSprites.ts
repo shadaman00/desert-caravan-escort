@@ -168,8 +168,12 @@ export function drawPixelMortarsAndExplosions(
     const m = mortars[i];
     const tx = Math.round(m.targetX / px) * px;
     const ty = Math.round(m.targetY / px) * px;
-    ctx.fillStyle = 'rgba(249, 115, 22, 0.55)';
-    ctx.fillRect(tx - 12, ty - 2, 24, 4);
+    // Crisp pulsing pixel target reticle
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.72)';
+    ctx.fillRect(tx - 14, ty - 2, 10, 4);
+    ctx.fillRect(tx + 4, ty - 2, 10, 4);
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(tx - 2, ty - 4, 4, 8);
 
     const sx = Math.round(m.x / px) * px;
     const sy = Math.round(m.y / px) * px;
@@ -182,19 +186,35 @@ export function drawPixelMortarsAndExplosions(
   for (let i = 0; i < explosions.length; i++) {
     const exp = explosions[i];
     const t = Math.min(1, exp.age / exp.maxLife);
-    const currentR = Math.round((exp.radius * (0.28 + 0.72 * t)) / px) * px;
+    const currentR = Math.max(8, Math.round((exp.radius * (0.28 + 0.72 * t)) / px) * px);
     const ex = Math.round(exp.x / px) * px;
     const ey = Math.round(exp.y / px) * px;
-    ctx.globalAlpha = Math.max(0, 1 - t);
+    const fade = Math.max(0, 1 - t);
 
-    // 4-step retro diamond/square explosion burst
+    // Subtle translucent inner heat flash (keeps enemies/damage numbers legible underneath)
+    ctx.globalAlpha = fade * 0.28;
+    const coreR = Math.max(4, Math.round((currentR * 0.45) / px) * px);
     ctx.fillStyle = '#dd6b20';
-    ctx.fillRect(ex - currentR, ey - Math.floor(currentR / 3), currentR * 2, Math.floor((currentR * 2) / 3));
-    ctx.fillRect(ex - Math.floor(currentR / 3), ey - currentR, Math.floor((currentR * 2) / 3), currentR * 2);
+    ctx.fillRect(ex - coreR, ey - coreR, coreR * 2, coreR * 2);
 
-    const innerR = Math.max(4, Math.round((currentR * 0.55) / px) * px);
+    // Crisp hollow stepped pixel shockwave perimeter ring
+    ctx.globalAlpha = fade * 0.9;
+    ctx.fillStyle = '#f6ad55';
+    ctx.fillRect(ex - currentR, ey - currentR, currentR * 2, px * 2);
+    ctx.fillRect(ex - currentR, ey + currentR - px * 2, currentR * 2, px * 2);
+    ctx.fillRect(ex - currentR, ey - currentR, px * 2, currentR * 2);
+    ctx.fillRect(ex + currentR - px * 2, ey - currentR, px * 2, currentR * 2);
+
+    // Inner bright yellow highlight & 4 corner pixel sparks
+    const innerR = Math.max(4, currentR - px * 2);
     ctx.fillStyle = '#fef08a';
-    ctx.fillRect(ex - innerR, ey - innerR, innerR * 2, innerR * 2);
+    ctx.fillRect(ex - innerR, ey - innerR, innerR * 2, px);
+    ctx.fillRect(ex - innerR, ey + innerR - px, innerR * 2, px);
+    const diag = Math.round((currentR * 0.8) / px) * px;
+    ctx.fillRect(ex - diag - 2, ey - diag - 2, 4, 4);
+    ctx.fillRect(ex + diag - 2, ey - diag - 2, 4, 4);
+    ctx.fillRect(ex - diag - 2, ey + diag - 2, 4, 4);
+    ctx.fillRect(ex + diag - 2, ey + diag - 2, 4, 4);
   }
   ctx.restore();
 }

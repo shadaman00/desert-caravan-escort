@@ -16,12 +16,16 @@ import { SpawnSystem } from './SpawnSystem';
 import { BossSystem, type BossDebugSnapshot } from './BossSystem';
 import { evasionCooldown, isExpeditionSynergyActive } from '@/game/formulas';
 import {
-  drawPixelDamagePopups,
   drawPixelHarpoons,
   drawPixelHeatRayBeam,
   drawPixelMortarsAndExplosions,
-  drawPixelWeakPointReticle,
 } from '@/engine/render/pixel/sprites/worldSprites';
+import {
+  drawCrispBossTelegraph,
+  drawCrispDamagePopups,
+  drawCrispEnemyBars,
+  drawCrispWeakPointReticle,
+} from '@/engine/render/draw/overlayDraw';
 import { drawPixelMercenaries } from '@/engine/render/pixel/sprites/caravanSprites';
 import { drawPixelEnemies } from '@/engine/render/pixel/sprites/enemySprites';
 import { drawPixelBoss } from '@/engine/render/pixel/sprites/bossSprites';
@@ -723,7 +727,6 @@ export class CombatCoordinator {
   public render(ctx: CanvasRenderingContext2D, storeState: GameStoreState): void {
     const synergyActive =
       this.lastForcePreviewAll || isExpeditionSynergyActive(storeState.mercenaries);
-    const allTargets = this.getAllTargets();
     const turretSnap = this.turretSystem.getRenderState();
 
     drawPixelMercenaries(
@@ -752,8 +755,25 @@ export class CombatCoordinator {
     drawPixelHeatRayBeam(ctx, turretSnap.activeBeam);
     drawPixelHarpoons(ctx, turretSnap.harpoons);
     drawPixelMortarsAndExplosions(ctx, turretSnap.mortars, turretSnap.explosions);
-    drawPixelWeakPointReticle(ctx, turretSnap.aimState, allTargets, this.elapsedSec);
-    drawPixelDamagePopups(ctx, this.damageSystem.getPopups());
+  }
+
+  /**
+   * Pass 2 Native High-DPI Crisp Overlay (enemy HP/armor bars, boss telegraph, lock reticle, damage popups).
+   */
+  public renderOverlay(ctx: CanvasRenderingContext2D, _storeState: GameStoreState): void {
+    const allTargets = this.getAllTargets();
+    const turretSnap = this.turretSystem.getRenderState();
+
+    drawCrispEnemyBars(ctx, this.spawnSystem.getEnemies());
+    drawCrispBossTelegraph(
+      ctx,
+      this.bossSystem.getRenderSnapshot(),
+      WALKER_ANCHOR_X,
+      WALKER_GROUND_Y,
+      this.elapsedSec
+    );
+    drawCrispWeakPointReticle(ctx, turretSnap.aimState, allTargets, this.elapsedSec);
+    drawCrispDamagePopups(ctx, this.damageSystem.getPopups());
   }
 
   public getDebugSnapshot(

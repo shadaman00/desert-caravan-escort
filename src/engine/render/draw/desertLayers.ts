@@ -105,9 +105,9 @@ export function drawSkyBackdrop(
   ctx.arc(cx, cy, 22, 0, Math.PI * 2);
   ctx.fill();
 
-  // Retro Bayer 4x4 dithered horizon transition band
-  ctx.globalAlpha = 0.25 + palette.sandHazeAlpha * 0.45;
-  fillBayerDitherRect(ctx, 0, 108, width, 16, palette.skyMid, palette.skyBottom, 0.38, 2);
+  // Subtle horizon atmospheric haze dither (grounded at horizon y=224..248, never floating across upper sky)
+  ctx.globalAlpha = 0.12 + palette.sandHazeAlpha * 0.15;
+  fillBayerDitherRect(ctx, 0, 224, width, 24, palette.skyBottom, palette.sandHaze, 0.32, 2);
 
   // Horizon atmospheric haze band
   const hazeGrad = ctx.createLinearGradient(0, 210, 0, groundY + 10);
@@ -221,6 +221,11 @@ export function renderLayer0FarDunes(
   duneGrad.addColorStop(1, palette.farDuneAccent);
   fillPeriodicSilhouette(ctx, tileWidth, height, 98, FAR_DUNE_HARMONICS, duneGrad);
 
+  // Subtle atmospheric depth veil to separate far background from combat plane
+  ctx.globalAlpha = 0.12 + palette.sandHazeAlpha * 0.2;
+  ctx.fillStyle = palette.sandHaze;
+  ctx.fillRect(0, 96, tileWidth, height - 96);
+
   ctx.restore();
 }
 
@@ -273,6 +278,10 @@ export function renderLayer1MidDunesRuins(
   frontGrad.addColorStop(0, palette.midDune);
   frontGrad.addColorStop(1, palette.midRuins);
   fillPeriodicSilhouette(ctx, tileWidth, height, 82, MID_DUNE_FRONT_HARMONICS, frontGrad);
+
+  ctx.globalAlpha = 0.08 + palette.sandHazeAlpha * 0.12;
+  ctx.fillStyle = palette.sandHaze;
+  ctx.fillRect(0, 96, tileWidth, height - 96);
 
   ctx.restore();
 }
@@ -378,11 +387,11 @@ export function renderLayer3ForegroundSand(
   ctx.globalAlpha = 0.28;
   ctx.fillRect(0, 0, tileWidth, 3);
 
-  // Periodic sinusoidal sand ripples (exact periodic grid across [0, tileWidth])
-  ctx.globalAlpha = 0.45;
+  // Calm periodic horizontal sand ripples (exact periodic grid across [0, tileWidth])
+  ctx.globalAlpha = 0.26;
   ctx.strokeStyle = palette.fgTrack;
   ctx.lineWidth = 2;
-  const rippleRows = [18, 50, 84];
+  const rippleRows = [22, 54, 86];
   const rippleSegments = Math.max(4, Math.round(tileWidth / 5));
   for (let r = 0; r < rippleRows.length; r++) {
     const ripple = new Path2D();
@@ -398,22 +407,14 @@ export function renderLayer3ForegroundSand(
     ctx.stroke(ripple);
   }
 
-  // Exact integer divisor step (1360 / 40 = 34) for zero-seam track & pebble spacing
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = 2.5;
+  // Exact integer divisor step (1360 / 40 = 34) for zero-seam low-noise sand pebbles
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = palette.fgTrack;
   const trackStep = 40;
   for (let x = 0; x < tileWidth; x += trackStep) {
-    const track = new Path2D();
-    track.moveTo(x + 6, 30);
-    track.lineTo(x + 20, 42);
-    track.moveTo(x + 18, 66);
-    track.lineTo(x + 30, 76);
-    ctx.stroke(track);
-
-    ctx.fillStyle = palette.fgTrack;
-    ctx.beginPath();
-    ctx.arc(x + 32, 46, 1.6, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(x + 8, 34, 8, 2);
+    ctx.fillRect(x + 24, 68, 6, 2);
+    ctx.fillRect(x + 32, 46, 3, 2);
   }
 
   ctx.restore();

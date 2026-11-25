@@ -154,7 +154,7 @@ export const SELECTORS = {
   tabBtnMech: '[data-testid="tab-btn-mech"], button:has-text("기체 개조"), button:has-text("Mech")',
   tabBtnMercenaries: '[data-testid="tab-btn-mercenaries"], button:has-text("5인 용병단"), button:has-text("Mercenaries")',
   tabBtnTrading: '[data-testid="tab-btn-trading"], button:has-text("상단 교역소"), button:has-text("Trade")',
-  tabBtnCodex: '[data-testid="tab-btn-codex"], button:has-text("유물·비석 도감"), button:has-text("Codex")',
+  tabBtnCodex: '[data-testid="tab-btn-codex"], button:has-text("유물·도감"), button:has-text("유물·비석 도감"), button:has-text("Codex")',
 
   // Growth Upgrade Actions & Visual Tiers
   turretLevelText: '[data-testid="turret-level-text"], .turret-level-text',

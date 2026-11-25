@@ -260,6 +260,31 @@ export function drawCompiledSprite(
 }
 
 /**
+ * Renders a 2-tier stepped pixel-art contact shadow grounded on the desert floor.
+ */
+export function drawPixelGroundShadow(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  groundY: number,
+  radiusX: number,
+  radiusY = 4,
+  alpha = 0.28
+): void {
+  const px = PIXEL_UPSCALE;
+  const rx = Math.max(px * 2, Math.round(radiusX / px) * px);
+  const ry = Math.max(px, Math.round(radiusY / px) * px);
+  const sx = Math.round(cx / px) * px;
+  const sy = Math.round(groundY / px) * px;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(11, 14, 22, ${Math.max(0.05, Math.min(0.65, alpha)).toFixed(2)})`;
+  ctx.fillRect(sx - rx, sy - Math.floor(ry / 2), rx * 2, ry);
+  const innerRx = Math.max(px, Math.round((rx * 0.68) / px) * px);
+  ctx.fillRect(sx - innerRx, sy - Math.floor(ry / 2) - px, innerRx * 2, ry + px);
+  ctx.restore();
+}
+
+/**
  * Creates an offscreen pixel buffer canvas with nearest-neighbor configuration.
  */
 export function createPixelBuffer(

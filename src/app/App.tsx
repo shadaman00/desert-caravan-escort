@@ -219,6 +219,7 @@ export default function App(): ReactElement {
   const combatCoordinatorRef = useRef<CombatCoordinator | null>(null);
   const particlePoolRef = useRef<ParticlePool | null>(null);
   const cameraSystemRef = useRef<CameraSystem | null>(null);
+  const routeSystemRef = useRef<RouteSystem | null>(null);
 
   const [activeTab, setActiveTab] = useState<GrowthTab>('MECH');
   const [tradeQtyInput, setTradeQtyInput] = useState<string>('10');
@@ -441,6 +442,7 @@ export default function App(): ReactElement {
     combatCoordinatorRef.current = combatCoordinator;
     particlePoolRef.current = renderer.particlePool;
     cameraSystemRef.current = cameraSystem;
+    routeSystemRef.current = routeSystem;
 
     if (typeof window !== 'undefined') {
       window.__SANDWALKER_AUDIO__ = {
@@ -751,6 +753,9 @@ export default function App(): ReactElement {
             excavationSystem.render(ctx);
             combatCoordinator.render(ctx, useGameStore.getState());
           },
+          renderOverlayLayer: (overlayCtx) => {
+            combatCoordinator.renderOverlay(overlayCtx, useGameStore.getState());
+          },
         });
       },
     });
@@ -768,6 +773,7 @@ export default function App(): ReactElement {
       combatCoordinatorRef.current = null;
       particlePoolRef.current = null;
       cameraSystemRef.current = null;
+      routeSystemRef.current = null;
       if (typeof window !== 'undefined' && window.__SANDWALKER_DEBUG__) {
         delete window.__SANDWALKER_DEBUG__;
       }
@@ -838,6 +844,13 @@ export default function App(): ReactElement {
         cooldownRemainingSec: ds.cooldownRemainingSec,
         cooldownRatio: ds.cooldownRatio,
       });
+      const routeSnap = routeSystemRef.current?.update(0, fsm.getCurrentStateId(), store, {
+        openingElapsedSeconds: openingHookState.getElapsedSeconds(),
+        boostMultiplier: coordinator.getRouteSpeedMultiplier(),
+      });
+      if (routeSnap) {
+        setActualSpeedPx(Math.round(routeSnap.actualSpeed));
+      }
     }
   };
 
@@ -1642,7 +1655,7 @@ export default function App(): ReactElement {
               className={`tab-btn ${activeTab === 'RELICS' ? 'active' : ''}`}
               onClick={() => setActiveTab('RELICS')}
             >
-              유물·비석 도감
+              유물·도감
               {hasReadyRelic && (
                 <span data-testid="codex-ready-dot" className="codex-ready-dot" />
               )}
@@ -1835,7 +1848,7 @@ export default function App(): ReactElement {
                             [{def?.roleLabel ?? merc.role}] {def?.name ?? merc.name}
                           </strong>{' '}
                           <span>(Lv.{merc.level})</span>
-                          <div style={{ fontSize: '10px', opacity: 0.78 }}>
+                          <div style={{ fontSize: '11.5px', opacity: 0.9, lineHeight: 1.32 }}>
                             {merc.isUnlocked
                               ? def?.effectSummary
                               : def?.unlockHint ?? '진행 시 합류'}

@@ -82,6 +82,10 @@ body,
   color: #f6ad55;
   line-height: 1.2;
   white-space: nowrap;
+  background: rgba(11, 14, 22, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1px 7px;
 }
 
 .zone-a-progress-wrap {
@@ -128,6 +132,10 @@ body,
   color: #fed7d7;
   line-height: 1.1;
   white-space: nowrap;
+  background: rgba(11, 14, 22, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1px 7px;
 }
 
 .zone-a-hp-bar {
@@ -529,18 +537,23 @@ body,
 }
 
 .tab-btn {
+  position: relative;
   flex: 1;
+  min-width: 0;
   min-height: 40px;
   border: none;
   background: transparent;
-  color: #a0aec0;
+  color: #cbd5e0;
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: -0.25px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all 0.15s ease;
-  padding: 0 2px;
+  padding: 0 3px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tab-btn.active {
@@ -857,13 +870,15 @@ body,
 .dash-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 11px;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.32;
 }
 
 .dash-sub {
-  font-size: 11px;
-  color: #a0aec0;
+  font-size: 11.5px;
+  color: #cbd5e0;
+  line-height: 1.32;
 }
 
 .dash-actions {
@@ -990,7 +1005,8 @@ body,
   border: 2px solid #4a5568;
   border-radius: 3px;
   box-shadow: 2px 2px 0 #0b0c10;
-  font-size: 11px;
+  font-size: 11.5px;
+  line-height: 1.32;
 }
 
 .codex-relic-card.unlocked {
@@ -998,7 +1014,7 @@ body,
 }
 
 .codex-relic-card.locked {
-  opacity: 0.58;
+  opacity: 0.72;
 }
 
 .codex-pixel-thumb {
@@ -1020,7 +1036,8 @@ body,
   background: #232936;
   border: 1px solid #2d3748;
   border-radius: 3px;
-  font-size: 11px;
+  font-size: 11.5px;
+  line-height: 1.32;
 }
 
 .codex-stele-row.decoded {
@@ -1029,7 +1046,7 @@ body,
 
 .codex-stele-inscription {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 11.5px;
   color: #fefcbf;
 }
 
@@ -1041,7 +1058,7 @@ body,
   background: #141720;
   border: 1px solid #4a5568;
   border-radius: 3px;
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
 .codex-timer-pill {
@@ -1099,7 +1116,7 @@ body,
   display: none;
 }
 
-@media (min-width: 1024px) and (min-height: 600px) {
+@media (min-width: 1024px) and (min-height: 780px) {
   .desktop-shortcut-legend {
     display: block;
     position: fixed;

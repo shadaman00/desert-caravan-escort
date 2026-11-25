@@ -54,34 +54,37 @@ export const CARAVAN_PALETTE_PHARAOH: Readonly<Record<string, string>> = {
 
 export const ENEMY_PALETTE: Readonly<Record<string, string>> = {
   K: '#141720', // pixel outline
-  R: '#9b2c2c', // bandit crimson cloak
+  R: '#c53030', // bandit crimson cloak (higher visibility in DUSK/STORM)
   D: '#742a2a', // bandit hood shadow
-  O: '#f6ad55', // ochre sash / trim
+  O: '#fbd38d', // warm turban / sash highlight
   S: '#e2e8f0', // steel blade / highlight
+  H: '#f7fafc', // crisp top rim specular highlight
   M: '#2d3748', // scorpion obsidian carapace
   A: '#4a5568', // scorpion joint plate
   B: '#90cdf4', // armor shine
   Y: '#ecc94b', // glowing venom stinger / weak point
-  P: '#553c9a', // mirage core purple
+  G: '#68d391', // glowing green venom core
+  P: '#6b46c1', // mirage core purple
   C: '#7dd3fc', // mirage spectral cyan
-  W: '#bae6fd', // mirage pale mist
+  W: '#e0f2fe', // mirage pale mist highlight
 };
 
 export const BOSS_PALETTE: Readonly<Record<string, string>> = {
   K: '#0f1219', // heavy outline
   D: '#1a202c', // deep obsidian
   M: '#2d3748', // armored steel
-  L: '#4a5568', // mid chitin / armor
+  L: '#64748b', // mid chitin / armor rim
+  H: '#e2e8f0', // bright steel / carapace rim highlight
   B: '#90cdf4', // armor plating glow
   R: '#e53e3e', // red weak core / danger
   O: '#dd6b20', // copper ram / flame
   Y: '#ecc94b', // bright golden core
   W: '#fef08a', // white-hot weak spot
-  P: '#553c9a', // mirage royal cloak
-  V: '#805ad5', // mirage energy
+  P: '#6b46c1', // mirage royal cloak
+  V: '#9f7aea', // mirage energy highlight
   C: '#7dd3fc', // spirit cyan eye
   S: '#744210', // sandworm outer shell
-  N: '#b7791f', // sandworm ridge scale
+  N: '#d69e2e', // bright sandworm ridge scale
 };
 
 export const WORLD_PALETTE: Readonly<Record<string, string>> = {

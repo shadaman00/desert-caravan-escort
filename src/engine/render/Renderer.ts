@@ -9,7 +9,6 @@ import {
   SandwalkerRenderInput,
   WALKER_ANCHOR_X,
   WALKER_GROUND_Y,
-  drawSandwalkerTurret,
 } from './draw/sandwalker';
 import {
   WagonPose,
@@ -30,8 +29,10 @@ import {
 import {
   drawPixelSandwalkerHull,
   drawPixelSandwalkerLegsLayer,
+  drawPixelSandwalkerTurret,
 } from './pixel/sprites/sandwalkerSprites';
 import { drawPixelWagonTrain } from './pixel/sprites/caravanSprites';
+import { drawCrispSolarShield } from './draw/overlayDraw';
 
 export const ZONE_B_WIDTH = 680;
 export const ZONE_B_HEIGHT = 412;
@@ -68,6 +69,7 @@ export interface RendererDrawOptions {
   turretRecoilPx?: number;
   forceTurretPreview?: boolean;
   renderCombatLayer?: (ctx: CanvasRenderingContext2D) => void;
+  renderOverlayLayer?: (ctx: CanvasRenderingContext2D) => void;
   renderDialogueLayer?: (ctx: CanvasRenderingContext2D) => void;
 }
 
@@ -128,7 +130,7 @@ export class Renderer {
 
     this.slots.register(
       new SpriteSlot<SandwalkerRenderInput>('sandwalker.turret', (c, _transform, state) => {
-        drawSandwalkerTurret(c, this.walkerRig, state);
+        drawPixelSandwalkerTurret(c, this.walkerRig, state);
       })
     );
 
@@ -323,19 +325,6 @@ export class Renderer {
       walkerInput
     );
 
-    if (walkerInput.solarShieldHp > 0 && walkerInput.maxHp > 0) {
-      const shieldX = Math.round((WALKER_ANCHOR_X - 46) / 2) * 2;
-      const shieldY = Math.round((WALKER_GROUND_Y - 102 + this.walkerRig.hullBobY) / 2) * 2;
-      targetCtx.save();
-      targetCtx.globalAlpha = 0.35 + 0.12 * Math.sin(this.elapsedSec * 5);
-      targetCtx.fillStyle = '#38bdf8';
-      targetCtx.fillRect(shieldX, shieldY, 92, 2);
-      targetCtx.fillRect(shieldX, shieldY + 64, 92, 2);
-      targetCtx.fillRect(shieldX, shieldY, 2, 64);
-      targetCtx.fillRect(shieldX + 90, shieldY, 2, 64);
-      targetCtx.restore();
-    }
-
     this.slots.get<SandwalkerRenderInput>('sandwalker.turret')?.render(
       targetCtx,
       { x: WALKER_ANCHOR_X, y: WALKER_GROUND_Y },
@@ -344,7 +333,7 @@ export class Renderer {
 
     drawPixelSandwalkerLegsLayer(targetCtx, this.walkerRig, walkerInput, 'front');
 
-    // 4. Combat & World Objects Hook (Pixel Art)
+    // 4. Combat & World Objects Hook (Pass 1: Pixel Art)
     options.renderCombatLayer?.(targetCtx);
 
     // 5. Foreground Pixel Particle Pool
@@ -352,13 +341,7 @@ export class Renderer {
 
     targetCtx.restore();
 
-    // 6. Screen-space Camera Overlays (single sandstorm 50% dark vision mask + vignettes)
-    cameraSystem.renderOverlays(targetCtx, ZONE_B_WIDTH, ZONE_B_HEIGHT);
-
-    // 7. Dialogue & Debug Hook
-    options.renderDialogueLayer?.(targetCtx);
-
-    // 8. 2x Nearest-Neighbor Upscale Blit from 340x206 Pixel Buffer to Zone B Canvas
+    // 6. 2x Nearest-Neighbor Upscale Blit from 340x206 Pixel Buffer to Zone B Canvas
     if (usePixelBuffer) {
       screenCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       screenCtx.imageSmoothingEnabled = false;
@@ -375,6 +358,31 @@ export class Renderer {
         ZONE_B_HEIGHT
       );
     }
+
+    // 7. Pass 2 Native High-DPI Crisp Overlay (Solar Shield Dome, HP Bars, Boss Telegraph, Damage Popups)
+    screenCtx.save();
+    screenCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cameraSystem.applyCameraTransform(screenCtx);
+    drawCrispSolarShield(
+      screenCtx,
+      WALKER_ANCHOR_X,
+      WALKER_GROUND_Y,
+      this.walkerRig.hullBobY,
+      walkerInput.solarShieldHp,
+      walkerInput.maxHp,
+      this.elapsedSec
+    );
+    options.renderOverlayLayer?.(screenCtx);
+    screenCtx.restore();
+
+    // 8. Screen-space Camera Overlays (single sandstorm 50% dark vision mask + vignettes)
+    cameraSystem.renderOverlays(screenCtx, ZONE_B_WIDTH, ZONE_B_HEIGHT);
+
+    // 9. Dialogue & Debug Hook
+    options.renderDialogueLayer?.(screenCtx);
+
+    // Enforce nearest-neighbor smoothing state on screen context for pixel-art contract
+    screenCtx.imageSmoothingEnabled = false;
   }
 
   public dispose(): void {

@@ -2,104 +2,113 @@ import type { EnemyInstance, EnemyProjectile } from '@/engine/systems/SpawnSyste
 import {
   compileSprite,
   drawCompiledSprite,
+  drawPixelGroundShadow,
   PIXEL_UPSCALE,
   type CompiledPixelSprite,
 } from '../PixelCanvas';
 import { ENEMY_PALETTE } from '../palettes';
 
-// 13 x 13 Desert Bandit facing -X
+// 15 x 14 Desert Bandit facing -X with bright turban highlight & raised scimitar
 const BANDIT_FRAMES_M: readonly (readonly string[])[] = [
   [
-    '....KKKKK....',
-    '...KDDDDDK...',
-    '..KDDDOODDK..',
-    '...KRRRRRK...',
-    'SSSSRRRRRK...',
-    'SK..KRRRRK...',
-    '...KRRRRROK..',
-    '...KRRRRRK...',
-    '....KR.RK....',
-    '....KO.OK....',
-    '.KKKKKKKKKKK.',
-    'KOOOOOOOOOOOK',
+    '.....HHHHK.....',
+    '....KOOOODK....',
+    '...KOOODDDDK...',
+    '....KRRRRRK....',
+    '.HHHKRRRRROK...',
+    'SSH.KRRRRRRK...',
+    'SK..KRRRRROK...',
+    '....KRRRRRK....',
+    '....KRRRRRK....',
+    '.....KR.RK.....',
+    '.....KO.OK.....',
+    '.KKKKKKKKKKKKK.',
+    'KOOOOOOOOOOOOOK',
+    '.KKKKKKKKKKKKK.',
   ],
   [
-    '....KKKKK....',
-    '...KDDDDDK...',
-    '..KDDDOODDK..',
-    '...KRRRRRK...',
-    '.SSSRRRRRK...',
-    '..SSKRRRRK...',
-    '...KRRRRROK..',
-    '...KRRRRRK...',
-    '...KR...RK...',
-    '...KO...OK...',
-    '.KKKKKKKKKKK.',
-    'KOOOOOOOOOOOK',
+    '.....HHHHK.....',
+    '....KOOOODK....',
+    '...KOOODDDDK...',
+    '....KRRRRRK....',
+    '..HHKRRRRROK...',
+    '.SSHKRRRRRRK...',
+    '..SKKRRRRROK...',
+    '....KRRRRRK....',
+    '....KRRRRRK....',
+    '....KR...RK....',
+    '....KO...OK....',
+    '.KKKKKKKKKKKKK.',
+    'KOOOOOOOOOOOOOK',
+    '.KKKKKKKKKKKKK.',
   ],
 ];
 
-// 19 x 13 Armored Scorpion with raised glowing tail stinger (facing -X)
+// 21 x 13 Armored Scorpion with cyan-rimmed shell & glowing venom stinger (facing -X)
 const SCORPION_FRAMES_M: readonly (readonly string[])[] = [
   [
-    '.......KKK.........',
-    '......KYYYK....KK..',
-    '.......KKK....KAAM.',
-    '...........KKKKMMK.',
-    '..KKK..KKKKMMMMMMK.',
-    '.KAAAKKMMMMMMMMMMK.',
-    'KAA.KMMBBBBMMMMMMK.',
-    '....KMMMMMMMMMMMMK.',
-    '...KKMMAKMMMAKMMK..',
-    '..KA..KK.KA..KK.KA.',
-    '.KK.......KK.....KK',
+    '.......KGGK..........',
+    '......KYYYYK....KK...',
+    '.......KKKK....KAAM..',
+    '............KKKKMMK..',
+    '..KKK...KKKKBBBBMMK..',
+    '.KBBBK.KBBBBMMMMMMMK.',
+    'KHH.KMMBBBBMMMMMMMMK.',
+    '....KMMMMMMMMMMMMMMK.',
+    '...KKMMAAKMMMAAKMMK..',
+    '..KA...KK.KA...KK.KA.',
+    '.KK........KK.....KK.',
   ],
   [
-    '.......KKK.........',
-    '......KYYYK....KK..',
-    '.......KKK....KAAM.',
-    '...........KKKKMMK.',
-    '.KKK...KKKKMMMMMMK.',
-    'KAAAKKKMMMMMMMMMMK.',
-    '.KAAKMMBBBBMMMMMMK.',
-    '....KMMMMMMMMMMMMK.',
-    '...KKMMAKMMMAKMMK..',
-    '...KA..K..KA..K.KA.',
-    '...KK.....KK....KK.',
+    '.......KGGK..........',
+    '......KYYYYK....KK...',
+    '.......KKKK....KAAM..',
+    '............KKKKMMK..',
+    '.KKK....KKKKBBBBMMK..',
+    'KBBBKK.KBBBBMMMMMMMK.',
+    '.KHHKMMBBBBMMMMMMMMK.',
+    '....KMMMMMMMMMMMMMMK.',
+    '...KKMMAAKMMMAAKMMK..',
+    '...KA...K..KA...K.KA.',
+    '...KK......KK.....KK.',
   ],
 ];
 
-// 13 x 15 Mirage Spirit diamond crystal
+// 15 x 15 Mirage Spirit bright crystal core
 const MIRAGE_FRAMES_M: readonly (readonly string[])[] = [
   [
-    '......C......',
-    '.....KCK.....',
-    '....KCPCK....',
-    '...KCPWPCK...',
-    '..KCPWWWPCK..',
-    '.KCPWWWWWPCC.',
-    'KCPWWCCCWWPCK',
-    '.KCPWWWWWPCC.',
-    '..KCPWWWPCK..',
-    '...KCPWPCK...',
-    '....KCPCK....',
-    '.....KCK.....',
-    '......C......',
+    '.......H.......',
+    '......KCK......',
+    '.....KCPCK.....',
+    '....KCPWPCK....',
+    '...KCPWWWPCK...',
+    '..KCPWWWWWPCK..',
+    '.KCPWWCCCWWPCK.',
+    'KCPWWCHHHWCWPCK',
+    '.KCPWWCCCWWPCK.',
+    '..KCPWWWWWPCK..',
+    '...KCPWWWPCK...',
+    '....KCPWPCK....',
+    '.....KCPCK.....',
+    '......KCK......',
+    '.......H.......',
   ],
   [
-    '......W......',
-    '.....KCK.....',
-    '....KCPCK....',
-    '...KCCWCCK...',
-    '..KCPWWWPCK..',
-    '.KCPWCCWPPCC.',
-    'WCPWCCCCWWPCW',
-    '.KCPWCCWPPCC.',
-    '..KCPWWWPCK..',
-    '...KCCWCCK...',
-    '....KCPCK....',
-    '.....KCK.....',
-    '......W......',
+    '.......W.......',
+    '......KHK......',
+    '.....KCPCK.....',
+    '....KCCWCCK....',
+    '...KCPWWWPCK...',
+    '..KCPWCCWPPCC..',
+    '.KCPWCCCCWWPCK.',
+    'WCPWCHHHHHWCPCW',
+    '.KCPWCCCCWWPCK.',
+    '..KCPWCCWPPCC..',
+    '...KCPWWWPCK...',
+    '....KCCWCCK....',
+    '.....KCPCK.....',
+    '......KHK......',
+    '.......W.......',
   ],
 ];
 
@@ -132,7 +141,7 @@ export function drawPixelEnemies(
   ctx: CanvasRenderingContext2D,
   enemies: readonly EnemyInstance[],
   projectiles: readonly EnemyProjectile[],
-  manualAimTargetId: string | null,
+  _manualAimTargetId: string | null,
   timeSec: number
 ): void {
   if (enemies.length === 0 && projectiles.length === 0) return;
@@ -143,6 +152,15 @@ export function drawPixelEnemies(
     if (!e.alive) continue;
 
     const sprite = selectEnemySprite(e);
+    const shadowY = e.archetypeId === 'MIRAGE_SPIRIT' ? e.y + e.radius + 8 : e.y + e.radius - 2;
+    drawPixelGroundShadow(
+      ctx,
+      e.x,
+      shadowY,
+      Math.max(10, e.radius * 0.85),
+      3,
+      e.archetypeId === 'MIRAGE_SPIRIT' ? 0.18 : 0.30
+    );
     drawCompiledSprite(ctx, sprite, e.x, e.y, {
       anchorX: 0.5,
       anchorY: 0.5,
@@ -158,37 +176,6 @@ export function drawPixelEnemies(
         ctx.fillStyle = '#bae6fd';
         ctx.fillRect(sx - 2, sy - 2, 4, 4);
       }
-    }
-
-    // Crisp pixel HP & Armor bars
-    const barW = 28;
-    const barX = Math.round((e.x - barW * 0.5) / px) * px;
-    const barY = Math.round((e.y - e.radius - 10) / px) * px;
-
-    ctx.fillStyle = '#0b0c10';
-    ctx.fillRect(barX - 2, barY - 2, barW + 4, 6);
-    const hpRatio = e.maxHp > 0 ? Math.max(0, Math.min(1, e.hp / e.maxHp)) : 0;
-    const fillW = Math.round((barW * hpRatio) / px) * px;
-    ctx.fillStyle = hpRatio > 0.4 ? '#48bb78' : '#f56565';
-    ctx.fillRect(barX, barY, Math.max(hpRatio > 0 ? px : 0, fillW), 2);
-
-    if (e.maxArmor > 0 && e.armor > 0) {
-      const armorRatio = Math.max(0, Math.min(1, e.armor / e.maxArmor));
-      const aFillW = Math.round((barW * armorRatio) / px) * px;
-      ctx.fillStyle = '#0b0c10';
-      ctx.fillRect(barX - 2, barY - 6, barW + 4, 4);
-      ctx.fillStyle = '#63b3ed';
-      ctx.fillRect(barX, barY - 4, Math.max(px, aFillW), 2);
-    }
-
-    if (manualAimTargetId && e.id === manualAimTargetId) {
-      const wx = Math.round((e.x + e.weakPointOffset.x) / px) * px;
-      const wy = Math.round((e.y + e.weakPointOffset.y) / px) * px;
-      ctx.fillStyle = '#ecc94b';
-      ctx.fillRect(wx - 6, wy - 6, 4, 2);
-      ctx.fillRect(wx + 4, wy - 6, 4, 2);
-      ctx.fillRect(wx - 6, wy + 6, 4, 2);
-      ctx.fillRect(wx + 4, wy + 6, 4, 2);
     }
   }
 

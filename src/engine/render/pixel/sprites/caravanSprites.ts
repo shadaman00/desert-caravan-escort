@@ -9,6 +9,7 @@ import {
   compileSprite,
   drawBresenhamLine,
   drawCompiledSprite,
+  drawPixelGroundShadow,
   PIXEL_UPSCALE,
   type CompiledPixelSprite,
 } from '../PixelCanvas';
@@ -135,6 +136,9 @@ export function drawPixelWagonTrain(
     );
 
     const frameIdx = Math.floor(Math.abs(pose.camelStridePhase)) % 2;
+    drawPixelGroundShadow(ctx, pose.camelX, groundY + 1, 10, 2, 0.28);
+    drawPixelGroundShadow(ctx, pose.wagonX, groundY + 1, 12, 2, 0.30);
+
     drawCompiledSprite(ctx, camelFrames[frameIdx], pose.camelX + 1, pose.camelY, {
       anchorX: 0.5,
       anchorY: 1.0,
@@ -266,15 +270,23 @@ export function drawPixelMercenaries(
       MERC_SPRITE_CACHE.set(rt.id, sprite);
     }
 
+    const isDeckMerc = rt.y < WALKER_GROUND_Y - 30;
+    const drawX = isDeckMerc ? rt.x - 10 : rt.x;
     const bob = rt.attackFlashTimer > 0 ? -2 : Math.round(Math.sin(timeSec * 4 + i) * 1) * px;
-    drawCompiledSprite(ctx, sprite, rt.x, rt.y + bob, {
+    if (!isDeckMerc) {
+      drawPixelGroundShadow(ctx, drawX, rt.y + 1, 7, 2, 0.28);
+    } else {
+      ctx.fillStyle = 'rgba(11, 14, 22, 0.45)';
+      ctx.fillRect(Math.round((drawX - 6) / px) * px, Math.round((rt.y - 2) / px) * px, 12, 2);
+    }
+    drawCompiledSprite(ctx, sprite, drawX, rt.y + bob, {
       anchorX: 0.5,
       anchorY: 1.0,
       pixelSize: px,
     });
 
     if (rt.skillFlashTimer > 0) {
-      const sx = Math.round((rt.x - 10) / px) * px;
+      const sx = Math.round((drawX - 10) / px) * px;
       const sy = Math.round((rt.y - 22) / px) * px;
       ctx.fillStyle = rt.colorAccent;
       ctx.fillRect(sx, sy, 20, 2);

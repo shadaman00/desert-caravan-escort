@@ -1,6 +1,7 @@
 import type { SkinId } from '@/store/types';
 import {
   getLegArmorVisualTier,
+  getTurretVisualTier,
   type SandwalkerRenderInput,
   type SandwalkerRig,
 } from '@/engine/render/draw/sandwalker';
@@ -8,6 +9,7 @@ import {
   compileSprite,
   drawBresenhamLine,
   drawCompiledSprite,
+  drawPixelGroundShadow,
   PIXEL_UPSCALE,
   type CompiledPixelSprite,
 } from '../PixelCanvas';
@@ -79,20 +81,126 @@ export function drawPixelSandwalkerHull(
   const isPharaoh = input.equippedSkinId === 'GOLDEN_PHARAOH';
   const sprite = isPharaoh ? HULL_SPRITE_PHARAOH : HULL_SPRITE_DEFAULT;
 
+  drawPixelGroundShadow(ctx, anchorX, groundY + 1, 44, 4, 0.30);
+
   drawCompiledSprite(ctx, sprite, anchorX, hullCenterY, {
     anchorX: 0.5,
     anchorY: 0.5,
     pixelSize: PIXEL_UPSCALE,
   });
 
-  // Twin pixel furnace exhaust glow sparks behind hull
+  // Top hull specular rim highlight for dark NIGHT/STORM separation
   const px = PIXEL_UPSCALE;
+  ctx.fillStyle = isPharaoh ? '#fef08a' : '#cbd5e0';
+  ctx.fillRect(Math.round((anchorX - 18) / px) * px, Math.round((hullCenterY - 16) / px) * px, 34, 2);
+
+  // Twin pixel furnace exhaust glow sparks behind hull
   const rx = Math.round((anchorX - 38) / px) * px;
   const ry = Math.round((hullCenterY + 2) / px) * px;
   ctx.fillStyle = isPharaoh ? '#ecc94b' : '#dd6b20';
   ctx.fillRect(rx - 4, ry, 4, 4);
   ctx.fillStyle = '#fef08a';
   ctx.fillRect(rx - 2, ry - 4, 2, 2);
+}
+
+/**
+ * Renders unified 16-bit pixel-art Sandwalker turret (HEAT_RAY, HARPOON, MORTAR)
+ * with Tier 1..3 barrel evolution, recoil & switch bounce inside R_TURRET bounds.
+ */
+export function drawPixelSandwalkerTurret(
+  ctx: CanvasRenderingContext2D,
+  rig: SandwalkerRig,
+  input: SandwalkerRenderInput
+): void {
+  const anchorX = input.anchorX ?? 240;
+  const groundY = input.groundY ?? 336;
+  const mountX = anchorX + 4;
+  const mountY = groundY - 88 + rig.hullBobY;
+  const active = input.activeTurret;
+  const barrelCount = getTurretVisualTier(
+    input.turretLevels[active] ?? 1,
+    input.turretTiers[active] ?? 1
+  );
+  const px = PIXEL_UPSCALE;
+  const recoil = Math.round((input.recoilPx ?? 0) / px) * px;
+
+  let switchScaleY = 1;
+  let switchTilt = 0;
+  if (rig.switchAnimTimer > 0) {
+    const t = Math.min(1, rig.switchAnimTimer / 0.15);
+    switchScaleY = 1 - 0.25 * Math.sin(t * Math.PI);
+    switchTilt = -0.22 * Math.sin(t * Math.PI);
+  }
+
+  const baseAim = active === 'MORTAR' ? -0.45 : 0;
+  const aimAngle = (input.aimAngle ?? baseAim) + switchTilt;
+  const tierScale = 1 + (barrelCount - 1) * 0.1; // 1.0, 1.1, 1.2
+  const snap = (v: number) => Math.round(v / px) * px;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate(snap(mountX), snap(mountY));
+  ctx.scale(tierScale, tierScale * switchScaleY);
+
+  // Pixel pedestal collar seated atop hull
+  ctx.fillStyle = '#1a202c';
+  ctx.fillRect(-14, -8, 28, 10);
+  ctx.fillStyle = input.equippedSkinId === 'GOLDEN_PHARAOH' ? '#ecc94b' : '#4a5568';
+  ctx.fillRect(-12, -6, 24, 6);
+
+  ctx.translate(0, -10);
+  if (typeof ctx.rotate === 'function') {
+    ctx.rotate(aimAngle);
+  }
+  ctx.translate(-recoil, 0);
+
+  // Turret armored housing block
+  const podW = 24;
+  const podH = 14;
+  ctx.fillStyle = '#1a202c';
+  ctx.fillRect(-14, -9, podW + 4, podH + 4);
+
+  if (active === 'HEAT_RAY') {
+    ctx.fillStyle = '#9b2c2c';
+    ctx.fillRect(-12, -7, podW, podH);
+    ctx.fillStyle = '#e53e3e';
+    ctx.fillRect(-10, -5, podW - 4, 4);
+    // Stepped top cooling fins scaled by tier
+    ctx.fillStyle = '#f6ad55';
+    for (let f = 0; f < barrelCount; f++) {
+      ctx.fillRect(-10 + f * 6, -11, 4, 4);
+    }
+  } else if (active === 'HARPOON') {
+    ctx.fillStyle = '#2c5282';
+    ctx.fillRect(-12, -7, podW, podH);
+    ctx.fillStyle = '#63b3ed';
+    ctx.fillRect(-10, -5, podW - 4, 4);
+    // Brass winch spool
+    ctx.fillStyle = '#ecc94b';
+    ctx.fillRect(-8, -4, 6, 6);
+  } else {
+    ctx.fillStyle = '#975a16';
+    ctx.fillRect(-12, -7, podW, podH);
+    ctx.fillStyle = '#ecc94b';
+    ctx.fillRect(-10, -5, podW - 4, 4);
+  }
+
+  // Pixel-stepped barrels scaled 1 / 2 / 3 by visual tier
+  const offsets = barrelCount === 1 ? [0] : barrelCount === 2 ? [-4, 4] : [-6, 0, 6];
+  const barrelLen = active === 'HARPOON' ? 24 : active === 'HEAT_RAY' ? 22 : 18;
+  const lineColor =
+    active === 'HEAT_RAY' ? '#f56565' : active === 'HARPOON' ? '#63b3ed' : '#d69e2e';
+  const tipColor =
+    active === 'HEAT_RAY' ? '#fefcbf' : active === 'HARPOON' ? '#f7fafc' : '#fef08a';
+
+  for (let i = 0; i < offsets.length; i++) {
+    const by = offsets[i];
+    drawBresenhamLine(ctx, 10, by, 10 + barrelLen, by, px, lineColor, active === 'MORTAR' ? 2 : 1);
+    ctx.fillStyle = tipColor;
+    ctx.fillRect(10 + barrelLen - 2, by - 2, 4, 4);
+  }
+
+  ctx.restore();
 }
 
 function getLegColors(skinId: SkinId, isBack: boolean): {
