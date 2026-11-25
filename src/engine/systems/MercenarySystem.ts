@@ -32,6 +32,7 @@ import {
   isExpeditionSynergyActive,
   statAt,
 } from '@/game/formulas';
+import { computeMercEquipmentMultipliers } from '@/game/data/equipment';
 import type { CombatTarget, DamageSystem } from './DamageSystem';
 
 export interface MercenaryRuntimeState {
@@ -234,20 +235,21 @@ export class MercenarySystem {
       const rt = this.runtimes.get(id)!;
       if (!rt.isActive) continue;
       const def = MERCENARY_DEFINITIONS[id];
+      const eqMult = computeMercEquipmentMultipliers(id, store.mercEquipment?.[id]);
 
       // Lili: continuous 2% maxHp/s passive + 5s Solar Blessing skill
       if (id === 'lili') {
         const canHeal =
           store.sandwalker.currentHp > 0 && store.sandwalker.currentHp < store.sandwalker.maxHp;
         if (canHeal) {
-          healedHp += LILI_PASSIVE_HEAL_RATE_PER_SEC * store.sandwalker.maxHp * safeDt;
+          healedHp += LILI_PASSIVE_HEAL_RATE_PER_SEC * store.sandwalker.maxHp * safeDt * eqMult.healMult;
         }
         rt.skillTimer += safeDt;
         if (rt.skillTimer >= def.skillCooldownSec) {
           if (canHeal) {
             rt.skillTimer -= def.skillCooldownSec;
             rt.skillFlashTimer = 0.45;
-            healedHp += LILI_SKILL_HEAL_FRACTION * store.sandwalker.maxHp;
+            healedHp += LILI_SKILL_HEAL_FRACTION * store.sandwalker.maxHp * eqMult.healMult;
             this.spawnShot({
               kind: 'HEAL_PULSE',
               fromX: rt.x,
@@ -283,7 +285,7 @@ export class MercenarySystem {
         if (closeEnemies.length > 0 || needShield) {
           rt.skillTimer -= def.skillCooldownSec;
           rt.skillFlashTimer = 0.5;
-          const shieldAmt = Math.round(statAt(TARIK_SHIELD_BASE, rt.level));
+          const shieldAmt = Math.round(statAt(TARIK_SHIELD_BASE, rt.level) * eqMult.shieldMult);
           const allowed = Math.max(0, shieldCap - store.sandwalker.solarShieldHp);
           shieldGranted += Math.min(shieldAmt, allowed);
 
@@ -330,7 +332,10 @@ export class MercenarySystem {
         for (let v = 0; v < SERA_VOLLEY_ARROW_COUNT; v++) {
           const vt = volleyTargets[v % volleyTargets.length];
           const dmg = calculatePartyAttack(
-            statAt(def.baseAttack, rt.level) * SERA_VOLLEY_DAMAGE_FACTOR * SERA_CRIT_MULTIPLIER,
+            statAt(def.baseAttack, rt.level) *
+              SERA_VOLLEY_DAMAGE_FACTOR *
+              SERA_CRIT_MULTIPLIER *
+              eqMult.attackMult,
             synergyActive
           );
           damageDealtTotal += this.dealMercDamage(vt, dmg, {
@@ -353,7 +358,7 @@ export class MercenarySystem {
         rt.skillTimer -= def.skillCooldownSec;
         rt.skillFlashTimer = 0.45;
         const novaDmg = calculatePartyAttack(
-          statAt(ZARA_NOVA_BASE_DAMAGE, rt.level),
+          statAt(ZARA_NOVA_BASE_DAMAGE, rt.level) * eqMult.attackMult,
           synergyActive
         );
         for (let i = 0; i < targets.length; i++) {
@@ -392,7 +397,10 @@ export class MercenarySystem {
       } else if (id === 'harun' && rt.skillTimer >= def.skillCooldownSec) {
         rt.skillTimer -= def.skillCooldownSec;
         rt.skillFlashTimer = 0.35;
-        const slingDmg = calculatePartyAttack(statAt(def.baseAttack, rt.level), synergyActive);
+        const slingDmg = calculatePartyAttack(
+          statAt(def.baseAttack, rt.level) * eqMult.attackMult,
+          synergyActive
+        );
         damageDealtTotal += this.dealMercDamage(target, slingDmg, {
           isCrit: false,
           color: '#f6ad55',
@@ -420,7 +428,10 @@ export class MercenarySystem {
 
         rt.attackFlashTimer = 0.16;
         const isCrit = id === 'sera' && this.rng() < SERA_CRIT_CHANCE;
-        const rawAtk = statAt(def.baseAttack, rt.level) * (isCrit ? SERA_CRIT_MULTIPLIER : 1.0);
+        const rawAtk =
+          statAt(def.baseAttack, rt.level) *
+          (isCrit ? SERA_CRIT_MULTIPLIER : 1.0) *
+          eqMult.attackMult;
         const finalAtk = calculatePartyAttack(rawAtk, synergyActive);
 
         damageDealtTotal += this.dealMercDamage(currentTarget, finalAtk, {

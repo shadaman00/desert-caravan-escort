@@ -121,9 +121,24 @@ export class BossSystem {
   private defeated = false;
   private pendingPartBreakGear = 0;
   private pendingPartBreakKeys = 0;
+  private hpScale = 1;
+  private damageScale = 1;
 
   constructor(options: { eventBus?: EventBus } = {}) {
     this.eventBus = options.eventBus;
+  }
+
+  private scaleHp(baseHp: number): number {
+    return this.hpScale === 1 ? baseHp : Math.max(1, Math.round(baseHp * this.hpScale));
+  }
+
+  private scaleArmor(baseArmor: number): number {
+    if (baseArmor <= 0 || this.hpScale === 1) return baseArmor;
+    return Math.max(1, Math.round(baseArmor * this.hpScale));
+  }
+
+  private scaleDamage(baseDamage: number): number {
+    return this.damageScale === 1 ? baseDamage : Math.max(1, Math.round(baseDamage * this.damageScale));
   }
 
   public isActive(): boolean {
@@ -160,7 +175,7 @@ export class BossSystem {
 
     let futureHp = 0;
     for (let i = this.phaseIndex + 1; i < this.activeDef.phases.length; i++) {
-      futureHp += this.activeDef.phases[i].hp;
+      futureHp += this.scaleHp(this.activeDef.phases[i].hp);
     }
     return Math.max(0, Math.round(this.bossTarget.hp + futureHp));
   }
@@ -170,7 +185,8 @@ export class BossSystem {
   }
 
   public getMaxHp(): number {
-    return this.activeDef?.maxHp ?? 0;
+    if (!this.activeDef) return 0;
+    return this.scaleHp(this.activeDef.maxHp);
   }
 
   public getArmor(): number {
@@ -185,9 +201,23 @@ export class BossSystem {
     return this.adds;
   }
 
-  public startEncounter(act: number, resume?: BossResumeOptions): void {
+  public startEncounter(
+    act: number,
+    resume?: BossResumeOptions,
+    scaleOptions?: { hpMultiplier?: number; damageMultiplier?: number }
+  ): void {
     const def = getBossDefinitionForAct(act);
     this.activeDef = def;
+    this.hpScale =
+      scaleOptions?.hpMultiplier && Number.isFinite(scaleOptions.hpMultiplier) && scaleOptions.hpMultiplier > 0
+        ? scaleOptions.hpMultiplier
+        : 1;
+    this.damageScale =
+      scaleOptions?.damageMultiplier &&
+      Number.isFinite(scaleOptions.damageMultiplier) &&
+      scaleOptions.damageMultiplier > 0
+        ? scaleOptions.damageMultiplier
+        : 1;
     this.defeated = false;
     this.adds = [];
     this.elapsedSec = 0;
@@ -223,9 +253,12 @@ export class BossSystem {
       if (def.isMultiPhase) {
         let futureHp = 0;
         for (let i = clampedPhaseIndex + 1; i < def.phases.length; i++) {
-          futureHp += def.phases[i].hp;
+          futureHp += this.scaleHp(def.phases[i].hp);
         }
-        const phaseHp = Math.max(0, Math.min(phaseDef.hp, resume.bossHp - futureHp));
+        const phaseHp = Math.max(
+          0,
+          Math.min(this.scaleHp(phaseDef.hp), resume.bossHp - futureHp)
+        );
         this.bossTarget.hp = phaseHp;
         if (phaseHp <= 0) {
           if (clampedPhaseIndex === def.phases.length - 1) {
@@ -259,11 +292,11 @@ export class BossSystem {
             const nextPhaseDef = this.getCurrentPhaseDef();
             let nextFutureHp = 0;
             for (let i = this.phaseIndex + 1; i < def.phases.length; i++) {
-              nextFutureHp += def.phases[i].hp;
+              nextFutureHp += this.scaleHp(def.phases[i].hp);
             }
             const nextPhaseHp = Math.max(
               0,
-              Math.min(nextPhaseDef.hp, resume.bossHp - nextFutureHp)
+              Math.min(this.scaleHp(nextPhaseDef.hp), resume.bossHp - nextFutureHp)
             );
             this.bossTarget.hp = nextPhaseHp;
             if (nextPhaseHp <= 0 && this.phaseIndex === def.phases.length - 1) {
@@ -273,7 +306,7 @@ export class BossSystem {
           }
         }
       } else {
-        this.bossTarget.hp = Math.max(0, Math.min(phaseDef.hp, resume.bossHp));
+        this.bossTarget.hp = Math.max(0, Math.min(this.scaleHp(phaseDef.hp), resume.bossHp));
         if (this.bossTarget.hp <= 0) {
           this.bossTarget.alive = false;
           this.defeated = true;
@@ -348,6 +381,8 @@ export class BossSystem {
     this.wavesSpawned = 0;
     this.pendingPartBreakGear = 0;
     this.pendingPartBreakKeys = 0;
+    this.hpScale = 1;
+    this.damageScale = 1;
   }
 
   private getCurrentPhaseDef(): BossPhaseDefinition {
@@ -383,15 +418,17 @@ export class BossSystem {
     this.specialVisualTimer = 0;
     this.specialTriggerCount = 0;
 
+    const scaledHp = this.scaleHp(phaseDef.hp);
+    const scaledArmor = this.scaleArmor(phaseDef.armor);
     this.bossTarget = {
       id: `boss_${def.id.toLowerCase()}`,
       x: def.x,
       y: def.y,
       radius: def.radius,
-      hp: phaseDef.hp,
-      maxHp: phaseDef.hp,
-      armor: phaseDef.armor,
-      maxArmor: phaseDef.armor,
+      hp: scaledHp,
+      maxHp: scaledHp,
+      armor: scaledArmor,
+      maxArmor: scaledArmor,
       armorAbsorbsHp: phaseDef.armorAbsorbsHp,
       weakPointOffset: { ...phaseDef.weakPointOffset },
       tags: [...phaseDef.tags],
@@ -501,7 +538,7 @@ export class BossSystem {
             dodgedAttack = true;
             this.spawnDodgeSparks(options.particlePool);
           } else {
-            hullDamage += phaseDef.attackDamage;
+            hullDamage += this.scaleDamage(phaseDef.attackDamage);
             if (options.cameraSystem) {
               options.cameraSystem.shake(10, 0.35);
             } else {

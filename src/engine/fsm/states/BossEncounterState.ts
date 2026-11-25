@@ -1,10 +1,19 @@
 import { GameFSM, IGameState } from '../GameFSM';
+import type { EventBus } from '@/engine/EventBus';
 import { useGameStore } from '@/store/gameStore';
 import { getBossDefinitionForAct } from '@/game/data/bosses';
 import type { BossSystem } from '@/engine/systems/BossSystem';
+import {
+  TEMPLE_COMMEMORATIVE_RELIC_ID,
+  TEMPLE_GATE_KEYS,
+  TEMPLE_GATE_MAP_FRAGMENTS,
+  computeDepthClearBonusGold,
+  getDepthModifiers,
+} from '@/engine/systems/EndlessExpeditionSystem';
 
 export interface BossEncounterStateOptions {
   bossSystem?: BossSystem;
+  eventBus?: EventBus;
 }
 
 export class BossEncounterState implements IGameState {
@@ -19,15 +28,25 @@ export class BossEncounterState implements IGameState {
   public bossWavesSpawned = 0;
 
   private readonly bossSystem?: BossSystem;
+  private readonly eventBus?: EventBus;
   private isResolvingDefeat = false;
 
   constructor(options: BossEncounterStateOptions = {}) {
     this.bossSystem = options.bossSystem;
+    this.eventBus = options.eventBus;
   }
 
   public enter(fsm: GameFSM): void {
     this.isResolvingDefeat = false;
-    const act = useGameStore.getState().meta.currentAct;
+    const store = useGameStore.getState();
+    const endlessActive = Boolean(store.endgame?.endlessActive);
+    const depthMods = endlessActive
+      ? getDepthModifiers(store.endgame?.currentDepth ?? 1)
+      : null;
+    const act = depthMods ? depthMods.bossRotationAct : store.meta.currentAct;
+    const scaleOptions = depthMods
+      ? { hpMultiplier: depthMods.hpMultiplier, damageMultiplier: depthMods.damageMultiplier }
+      : undefined;
     const bossDef = getBossDefinitionForAct(act);
 
     if (fsm.resumeContext && fsm.resumeContext.stateId === this.id) {
@@ -41,15 +60,19 @@ export class BossEncounterState implements IGameState {
       const resumedWavesSpawned = fsm.resumeContext.bossWavesSpawned;
 
       if (this.bossSystem) {
-        this.bossSystem.startEncounter(act, {
-          bossHp: resumedHp,
-          bossPhase: resumedPhase,
-          bossArmor: resumedArmor,
-          bossIsGroggy: resumedIsGroggy,
-          bossGroggyRemainingSec: resumedGroggyRemainingSec,
-          bossPartBreakTriggered: resumedPartBreakTriggered,
-          bossWavesSpawned: resumedWavesSpawned,
-        });
+        this.bossSystem.startEncounter(
+          act,
+          {
+            bossHp: resumedHp,
+            bossPhase: resumedPhase,
+            bossArmor: resumedArmor,
+            bossIsGroggy: resumedIsGroggy,
+            bossGroggyRemainingSec: resumedGroggyRemainingSec,
+            bossPartBreakTriggered: resumedPartBreakTriggered,
+            bossWavesSpawned: resumedWavesSpawned,
+          },
+          scaleOptions
+        );
         this.syncFromBossSystem();
       } else {
         this.bossMaxHp = Math.max(bossDef.maxHp, resumedHp);
@@ -65,7 +88,7 @@ export class BossEncounterState implements IGameState {
     } else {
       // Fresh encounter
       if (this.bossSystem) {
-        this.bossSystem.startEncounter(act);
+        this.bossSystem.startEncounter(act, undefined, scaleOptions);
         this.syncFromBossSystem();
       } else {
         this.bossMaxHp = bossDef.maxHp;
@@ -146,7 +169,10 @@ export class BossEncounterState implements IGameState {
     this.isResolvingDefeat = true;
 
     const store = useGameStore.getState();
-    const act = store.meta.currentAct;
+    const endlessActive = Boolean(store.endgame?.endlessActive);
+    const act = endlessActive
+      ? getDepthModifiers(store.endgame?.currentDepth ?? 1).bossRotationAct
+      : store.meta.currentAct;
     const bossDef = getBossDefinitionForAct(act);
 
     store.addCurrencies({
@@ -164,6 +190,37 @@ export class BossEncounterState implements IGameState {
 
     store.setRouteProgress(100);
     this.bossSystem?.clear();
+    this.eventBus?.emit('boss:defeated', {
+      bossId: bossDef.id,
+      act,
+      x: bossDef.x,
+      y: bossDef.y,
+    });
+
+    const latestStore = useGameStore.getState();
+    if (latestStore.endgame?.endlessActive) {
+      const { clearedDepth, nextDepth } = latestStore.advanceEndlessDepth();
+      const bonusGold = computeDepthClearBonusGold(clearedDepth);
+      useGameStore.getState().addCurrencies({ sunGold: bonusGold });
+      this.eventBus?.emit('endgame:depthCleared', {
+        clearedDepth,
+        nextDepth,
+        bonusGold,
+      });
+    } else if (
+      store.meta.currentAct === 4 &&
+      !latestStore.endgame?.endingCompleted &&
+      (latestStore.endgame?.templeGateUnlocked ||
+        (latestStore.currencies.mapFragments >= TEMPLE_GATE_MAP_FRAGMENTS &&
+          latestStore.currencies.templeKeys >= TEMPLE_GATE_KEYS))
+    ) {
+      if (useGameStore.getState().triggerTempleEnding()) {
+        this.eventBus?.emit('endgame:endingTriggered', {
+          commemorativeRelicId: TEMPLE_COMMEMORATIVE_RELIC_ID,
+        });
+      }
+    }
+
     fsm.transitionTo('OASIS_SETTLEMENT', { isChapterBossClear: true });
   }
 

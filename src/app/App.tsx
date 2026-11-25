@@ -29,6 +29,8 @@ import {
   useLegLevel,
   useMapFragments,
   useMercenaries,
+  useMercEquipment,
+  useEndgame,
   useNextOasisPriceRate,
   usePendingRelicCount,
   useRelicCodexCount,
@@ -41,6 +43,7 @@ import {
 } from '../store/selectors';
 import type { AdTierLevel, DailyMissionId, TurretType } from '../store/types';
 import { DebugBar } from '../ui/debug/DebugBar';
+import { SettingsModal } from '../ui/SettingsModal';
 import { adSimulator, AdSimulatorState } from '../game/monetization/AdSimulator';
 import { processRewardedAdRequest } from '../game/monetization/rewardedAds';
 import { SaveManager } from '../persistence/saveManager';
@@ -74,23 +77,62 @@ import {
   type DialogueDebugSnapshot,
 } from '../engine/systems/DialogueSystem';
 import { ExcavationSystem } from '../engine/systems/ExcavationSystem';
+import {
+  LootPickupSystem,
+  pickEnemyDropItem,
+} from '../engine/systems/LootPickupSystem';
+import { AutoUpgradeEngine } from '../engine/systems/AutoUpgradeEngine';
+import { QuestSystem } from '../engine/systems/QuestSystem';
+import { WanderingMerchantSystem } from '../engine/systems/WanderingMerchantSystem';
+import {
+  TEMPLE_COMMEMORATIVE_RELIC_ID,
+  TEMPLE_ENDING_EPILOGUE_LINES,
+  evaluateTempleGate,
+  getDepthModifiers,
+} from '../engine/systems/EndlessExpeditionSystem';
 import { Renderer } from '../engine/render/Renderer';
 import { compileSprite } from '../engine/render/pixel/PixelCanvas';
 import { WORLD_PALETTE } from '../engine/render/pixel/palettes';
 import { RELIC_ICON_MATRICES } from '../engine/render/pixel/sprites/worldSprites';
 import { soundEngine } from '../engine/audio/SoundEngine';
+import { bgmEngine } from '../engine/audio/BgmEngine';
 import type { ParticlePool } from '../engine/render/draw/particles';
+import { WALKER_ANCHOR_X, WALKER_GROUND_Y } from '../engine/render/draw/sandwalker';
 import { MERCENARY_DEFINITIONS, type MercenaryId } from '../game/data/mercenaries';
-import { getGoodsDisplayName, getOasisDefinition } from '../game/data/oases';
+import {
+  EQUIPMENT_RARITY_LABELS,
+  MERC_EQUIPMENT_CATALOG,
+} from '../game/data/equipment';
+import { getGoodsDisplayName, getOasisDefinition, isSurgeJackpot } from '../game/data/oases';
 import {
   createInitialDailyMissions,
   DAILY_MISSION_DEFINITIONS,
 } from '../game/data/dailyMissions';
 import { getTodayDateString } from '../store/defaults';
-import { getRelicDefinition, RELIC_DEFINITIONS, STELE_DEFINITIONS } from '../game/data/relics';
+import {
+  computeRelicCodexBonuses,
+  getRelicDefinition,
+  RELIC_DEFINITIONS,
+  RELIC_RARITY_LABELS,
+  STELE_DEFINITIONS,
+} from '../game/data/relics';
+import { QUEST_DEFINITIONS, URGENT_DELIVERY_REWARD_GOLD } from '../game/data/quests';
 import { getOpeningPhaseInfo, type OpeningPhaseInfo } from '../game/data/openingScript';
+import { getNextMilestoneSummary } from '../game/data/autoUpgradeRules';
 import { quicksandIgnore, tierUpGearCost, upgradeCost } from '../game/formulas';
-import { triggerHaptic } from '../game/haptics';
+import { setHapticsEnabled, triggerHaptic } from '../game/haptics';
+import {
+  SETTINGS_STORAGE_KEY,
+  loadUserSettings,
+  saveUserSettings,
+  type ToastDensity,
+  type UserSettings,
+} from '../game/settings';
+import type {
+  AutoInvestPolicy,
+  AutoUpgradeEventRecord,
+  AutoUpgradeItemKind,
+} from '../store/types';
 
 type GrowthTab = 'MECH' | 'MERCENARIES' | 'TRADE' | 'RELICS';
 
@@ -125,8 +167,16 @@ export interface SandwalkerDebugTelemetry {
     steles: ReturnType<typeof useGameStore.getState>['steles'];
     monetization: ReturnType<typeof useGameStore.getState>['monetization'];
     dailyMissions?: ReturnType<typeof useGameStore.getState>['dailyMissions'];
+    progression?: ReturnType<typeof useGameStore.getState>['progression'];
+    explorerPassives?: ReturnType<typeof useGameStore.getState>['explorerPassives'];
+    quests?: ReturnType<typeof useGameStore.getState>['quests'];
+    mercEquipment?: ReturnType<typeof useGameStore.getState>['mercEquipment'];
+    endgame?: ReturnType<typeof useGameStore.getState>['endgame'];
+    codexBonuses?: ReturnType<typeof computeRelicCodexBonuses>;
+    lootCount?: number;
     dialogue: DialogueDebugSnapshot;
   };
+  spawnLoot?: (itemKind: AutoUpgradeItemKind, x?: number, y?: number) => void;
 }
 
 declare global {
@@ -134,6 +184,7 @@ declare global {
     __SANDWALKER_DEBUG__?: SandwalkerDebugTelemetry;
     __SANDWALKER_AUDIO__?: {
       getStatus: () => ReturnType<typeof soundEngine.getStatus>;
+      getBgmStatus: () => ReturnType<typeof bgmEngine.getStatus>;
     };
   }
 }
@@ -249,6 +300,14 @@ export default function App(): ReactElement {
     cooldownRemainingSec: number;
     cooldownRatio: number;
   }>({ cooldownRemainingSec: 0, cooldownRatio: 0 });
+  const [expeditionBurstUi, setExpeditionBurstUi] = useState<{
+    ready: boolean;
+    cooldownRemainingSec: number;
+    cooldownRatio: number;
+    count: number;
+  }>({ ready: true, cooldownRemainingSec: 0, cooldownRatio: 0, count: 0 });
+  const [merchantRerollPending, setMerchantRerollPending] = useState<boolean>(false);
+  const [merchantRefreshTick, setMerchantRefreshTick] = useState<number>(0);
   const [actualSpeedPx, setActualSpeedPx] = useState<number>(0);
   const [relayBannerVisible, setRelayBannerVisible] = useState<boolean>(false);
   const [bossHud, setBossHud] = useState<BossDebugSnapshot | null>(null);
@@ -267,9 +326,32 @@ export default function App(): ReactElement {
   );
   const [zafar2xClaimed, setZafar2xClaimed] = useState<boolean>(false);
   const [relicAdPending, setRelicAdPending] = useState<boolean>(false);
+  const [userSettings, setUserSettings] = useState<UserSettings>(() => {
+    const loaded = loadUserSettings();
+    const hasSavedSettings =
+      typeof window !== 'undefined' &&
+      Boolean(window.localStorage?.getItem(SETTINGS_STORAGE_KEY));
+    const effectiveMuted = hasSavedSettings ? loaded.muted : soundEngine.isMuted();
+    const initial = { ...loaded, muted: effectiveMuted };
+    soundEngine.setMasterVolume(initial.masterVolume);
+    soundEngine.setSfxVolume(initial.sfxVolume);
+    soundEngine.setMuted(initial.muted);
+    bgmEngine.setVolumes({
+      masterVolume: initial.masterVolume,
+      bgmVolume: initial.bgmVolume,
+      muted: initial.muted,
+    });
+    setHapticsEnabled(initial.hapticsEnabled);
+    return initial;
+  });
   const [isMuted, setIsMuted] = useState<boolean>(() => soundEngine.isMuted());
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const toastDensityRef = useRef<ToastDensity>(userSettings.toastDensity);
+  toastDensityRef.current = userSettings.toastDensity;
   const [fullscreenSupported] = useState<boolean>(() => isFullscreenSupported());
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isFullscreenActive());
+  const [autoUpgradeToast, setAutoUpgradeToast] = useState<AutoUpgradeEventRecord | null>(null);
+  const autoToastTimerRef = useRef<number | null>(null);
   const [codexNowMs, setCodexNowMs] = useState<number>(() => Date.now());
   const [saveJsonInput, setSaveJsonInput] = useState<string>('');
   const [saveBackupStatus, setSaveBackupStatus] = useState<string | null>(null);
@@ -308,6 +390,8 @@ export default function App(): ReactElement {
   const cargoCapacity = useCargoCapacity();
 
   const mercenaries = useMercenaries();
+  const mercEquipment = useMercEquipment();
+  const endgame = useEndgame();
   const synergyActive = useIsExpeditionSynergyActive();
   const decodedSteleCount = useDecodedSteleCount();
   const relicCodexCount = useRelicCodexCount();
@@ -317,6 +401,11 @@ export default function App(): ReactElement {
   const relicCodex = useGameStore((s) => s.relics.codex);
   const dailyMissions = useGameStore((s) => s.dailyMissions);
   const dailySkipTicketsLeft = useGameStore((s) => s.monetization.dailySkipTicketsLeft);
+  const progression = useGameStore((s) => s.progression);
+  const explorerPassives = useGameStore((s) => s.explorerPassives);
+  const questsState = useGameStore((s) => s.quests);
+  const totalPlaySeconds = useGameStore((s) => s.meta.totalPlaySeconds);
+  const fullGameState = useGameStore((s) => s);
 
   const switchTurretAction = useGameStore((s) => s.switchTurret);
   const addCurrencies = useGameStore((s) => s.addCurrencies);
@@ -333,20 +422,28 @@ export default function App(): ReactElement {
     emergencyReviveState,
     dialogueSystem,
     excavationSystem,
+    lootPickupSystem,
+    autoUpgradeEngine,
+    questSystem,
+    wanderingMerchantSystem,
   } = useMemo(() => {
     const bus = new EventBus();
     const machine = new GameFSM(timerService, bus);
     const hazard = new HazardSystem();
     const boss = new BossSystem({ eventBus: bus });
     const dialogue = new DialogueSystem();
-    const excavation = new ExcavationSystem();
+    const excavation = new ExcavationSystem({ eventBus: bus });
+    const lootPickup = new LootPickupSystem({ eventBus: bus });
+    const autoUpgrade = new AutoUpgradeEngine({ eventBus: bus });
+    const quests = new QuestSystem({ eventBus: bus, autoUpgradeEngine: autoUpgrade });
+    const wanderingMerchant = new WanderingMerchantSystem();
     const opening = new OpeningHookState({
       dialogueSystem: dialogue,
       excavationSystem: excavation,
     });
     const hub = new OasisHubState();
     const revive = new EmergencyReviveState();
-    const settlement = new OasisSettlementState();
+    const settlement = new OasisSettlementState({ eventBus: bus });
 
     const getBoostMult = () =>
       combatCoordinatorRef.current?.getRouteSpeedMultiplier() ?? 1;
@@ -355,9 +452,9 @@ export default function App(): ReactElement {
     machine.registerState(hub);
     machine.registerState(new MarchNormalState({ getSpeedMultiplier: getBoostMult }));
     machine.registerState(
-      new HazardZoneState({ getSpeedMultiplier: getBoostMult, hazardSystem: hazard })
+      new HazardZoneState({ getSpeedMultiplier: getBoostMult, hazardSystem: hazard, eventBus: bus })
     );
-    machine.registerState(new BossEncounterState({ bossSystem: boss }));
+    machine.registerState(new BossEncounterState({ bossSystem: boss, eventBus: bus }));
     machine.registerState(revive);
     machine.registerState(settlement);
 
@@ -372,6 +469,10 @@ export default function App(): ReactElement {
       emergencyReviveState: revive,
       dialogueSystem: dialogue,
       excavationSystem: excavation,
+      lootPickupSystem: lootPickup,
+      autoUpgradeEngine: autoUpgrade,
+      questSystem: quests,
+      wanderingMerchantSystem: wanderingMerchant,
     };
   }, []);
 
@@ -455,6 +556,7 @@ export default function App(): ReactElement {
     if (typeof window !== 'undefined') {
       window.__SANDWALKER_AUDIO__ = {
         getStatus: () => soundEngine.getStatus(),
+        getBgmStatus: () => bgmEngine.getStatus(),
       };
       window.__SANDWALKER_DEBUG__ = {
         getSnapshot: () => {
@@ -464,7 +566,9 @@ export default function App(): ReactElement {
           const relayVisible = hazardSystem.isRelayTowerAvailable(
             stateId,
             latest.meta.currentAct,
-            latest.meta.currentOasisIndex
+            latest.meta.currentOasisIndex,
+            Boolean(latest.endgame?.endlessActive),
+            latest.endgame?.currentDepth ?? 1
           );
           return {
             combat: combatCoordinator.getDebugSnapshot(stateId, latest, {
@@ -494,17 +598,45 @@ export default function App(): ReactElement {
                   items: latest.dailyMissions.items.map((m) => ({ ...m })),
                 }
               : undefined,
+            progression: latest.progression
+              ? {
+                  ...latest.progression,
+                  counters: {
+                    ...latest.progression.counters,
+                    killsByTurret: { ...latest.progression.counters.killsByTurret },
+                  },
+                  completedMilestones: [...latest.progression.completedMilestones],
+                  recentAutoUpgrades: [...latest.progression.recentAutoUpgrades],
+                }
+              : undefined,
+            explorerPassives: latest.explorerPassives ? { ...latest.explorerPassives } : undefined,
+            quests: latest.quests
+              ? {
+                  completedIds: [...latest.quests.completedIds],
+                  urgentDelivery: { ...latest.quests.urgentDelivery },
+                }
+              : undefined,
+            mercEquipment: latest.mercEquipment ? { ...latest.mercEquipment } : undefined,
+            endgame: latest.endgame ? { ...latest.endgame } : undefined,
+            codexBonuses: computeRelicCodexBonuses(latest.relics.codex, latest.explorerPassives),
+            lootCount: lootPickupSystem.getActivePickups().length,
             dialogue: dialogueSystem.getDebugSnapshot(),
           };
+        },
+        spawnLoot: (itemKind, x = 420, y = WALKER_GROUND_Y - 12) => {
+          lootPickupSystem.spawnLoot(itemKind, x, y);
         },
       };
     }
 
     let playTimeAccum = 0;
+    let sandstormSecAccum = 0;
+    let killDropCounter = 0;
     let lastSwitchCdRatio = 0;
     let lastReticleKey = '0';
     let lastDodgeKey = '0:0';
     let lastShieldKey = '0';
+    let lastBurstKey = '1:0:0';
     let lastActualSpeed = -1;
     let lastRelayVisible = false;
     let lastBossHudKey = 'none';
@@ -536,8 +668,158 @@ export default function App(): ReactElement {
       }
     });
 
+    const unsubEnemyKillLoot = eventBus.on('combat:enemyKilled', ({ archetypeId, x, y }) => {
+      const store = useGameStore.getState();
+      if (!store.meta.isIntroCompleted) return;
+      killDropCounter += 1;
+      const dropKind = pickEnemyDropItem(archetypeId, killDropCounter, store.sandwalker.activeTurret);
+      if (dropKind) {
+        lootPickupSystem.spawnLoot(dropKind, x, y);
+      }
+    });
+
+    const unsubBossBreakLoot = eventBus.on('boss:partBreak', ({ act, x, y }) => {
+      const store = useGameStore.getState();
+      if (!store.meta.isIntroCompleted) return;
+      lootPickupSystem.spawnLoot(act >= 2 ? 'HYDRAULIC_BLUEPRINT' : 'TURRET_PART_HARPOON', x, y);
+    });
+
+    const showBannerToast = (
+      record: AutoUpgradeEventRecord,
+      durationMs: number,
+      important = false
+    ) => {
+      const density = toastDensityRef.current;
+      if (density === 'OFF') return;
+      if (
+        density === 'IMPORTANT' &&
+        !important &&
+        record.category !== 'TURRET_TIER' &&
+        record.category !== 'WAGON' &&
+        record.category !== 'EQUIP'
+      ) {
+        return;
+      }
+      setAutoUpgradeToast(record);
+      if (autoToastTimerRef.current !== null) {
+        window.clearTimeout(autoToastTimerRef.current);
+      }
+      autoToastTimerRef.current = window.setTimeout(() => {
+        setAutoUpgradeToast(null);
+      }, durationMs);
+    };
+
+    const unsubAutoUpgradeToast = eventBus.on('progression:autoUpgrade', (record) => {
+      const isMajor =
+        record.category === 'TURRET_TIER' ||
+        record.category === 'WAGON' ||
+        record.category === 'EQUIP';
+      soundEngine.play(isMajor ? 'TIER_UP_FANFARE' : 'AUTO_UPGRADE_CHIME');
+      triggerHaptic(18);
+      showBannerToast(record, 2600, isMajor);
+      const pool = particlePoolRef.current;
+      if (pool) {
+        for (let k = 0; k < 8; k++) {
+          const angle = -Math.PI + (k / 7) * Math.PI;
+          pool.spawn({
+            kind: 'SPARK',
+            x: WALKER_ANCHOR_X + (Math.random() - 0.5) * 28,
+            y: WALKER_GROUND_Y - 46,
+            vx: Math.cos(angle) * 65,
+            vy: Math.sin(angle) * 75 - 20,
+            gravity: 110,
+            size: 3.5,
+            endSize: 0.8,
+            maxLife: 0.55,
+            startAlpha: 0.95,
+            color: '#fef08a',
+          });
+        }
+      }
+    });
+
+    const unsubLootSfx = eventBus.on('loot:collected', () => {
+      soundEngine.play('LOOT_PICKUP');
+    });
+
+    const unsubRelicAppraisedSfx = eventBus.on('excavation:relicAppraised', ({ relicId }) => {
+      const relicDef = getRelicDefinition(relicId);
+      const isLegendaryOrAncient =
+        relicDef?.rarity === 'LEGENDARY' || relicDef?.rarity === 'ANCIENT';
+      soundEngine.play(isLegendaryOrAncient ? 'LEGENDARY_RELIC' : 'AUTO_UPGRADE_CHIME');
+    });
+
+    const unsubQuestToast = eventBus.on('quest:completed', ({ title, kind }) => {
+      soundEngine.play('QUEST_COMPLETE');
+      triggerHaptic(22);
+      showBannerToast(
+        {
+          id: `qtoast_${Date.now()}`,
+          timestamp: Date.now(),
+          category: 'TURRET_LV',
+          targetLabel: kind === 'URGENT' ? '긴급 운송 완료' : '퀘스트 완료',
+          fromValue: title,
+          toValue: '보상 자동 지급',
+          triggerReason: '서사 임무 달성',
+        },
+        2800,
+        true
+      );
+    });
+
+    const unsubBurstToast = eventBus.on(
+      'combat:expeditionBurst',
+      ({ totalDamage, healedHp, shieldGranted }) => {
+        soundEngine.play('TIER_UP_FANFARE');
+        triggerHaptic([24, 30, 36]);
+        showBannerToast(
+          {
+            id: `burst_${Date.now()}`,
+            timestamp: Date.now(),
+            category: 'MERC',
+            targetLabel: '5인 합동 필살기',
+            fromValue: `피해 ${Math.round(totalDamage)}`,
+            toValue: `회복 +${healedHp} / 보호막 +${shieldGranted}`,
+            triggerReason: '원정대 결속 발동',
+          },
+          2800,
+          true
+        );
+      }
+    );
+
+    const unsubEndingTriggered = eventBus.on('endgame:endingTriggered', () => {
+      soundEngine.play('LEGENDARY_RELIC');
+      triggerHaptic([28, 40, 50]);
+      TEMPLE_ENDING_EPILOGUE_LINES.forEach((line, idx) => {
+        dialogueSystem.enqueue(line.speaker, line.text, `temple_epilogue_${idx}`);
+      });
+    });
+
+    const unsubDepthCleared = eventBus.on(
+      'endgame:depthCleared',
+      ({ clearedDepth, nextDepth, bonusGold }) => {
+        soundEngine.play('TIER_UP_FANFARE');
+        triggerHaptic([20, 30, 20]);
+        showBannerToast(
+          {
+            id: `depth_${Date.now()}`,
+            timestamp: Date.now(),
+            category: 'TURRET_LV',
+            targetLabel: `심층 사막 Depth ${clearedDepth} 돌파!`,
+            fromValue: `Depth ${clearedDepth}`,
+            toValue: `Depth ${nextDepth} (+${bonusGold}G)`,
+            triggerReason: '무한 심층 원정 보상',
+          },
+          3000,
+          true
+        );
+      }
+    );
+
     const unsubStateResetAim = eventBus.on('state:change', ({ from, to }) => {
       setIntroSeenState(SaveManager.isIntroSeen());
+      bgmEngine.setTheme(to);
       if (to === 'BOSS_ENCOUNTER') {
         soundEngine.play('BOSS_WARNING');
       } else if (to === 'OASIS_SETTLEMENT') {
@@ -613,6 +895,15 @@ export default function App(): ReactElement {
         renderer.update(dt, routeSnap, storeState);
 
         const freshStore = useGameStore.getState();
+        if (stateId === 'HAZARD_ZONE' && routeSnap.isSandstorm) {
+          sandstormSecAccum += dt;
+          if (sandstormSecAccum >= 1.0) {
+            sandstormSecAccum -= 1.0;
+            autoUpgradeEngine.recordSandstormSecond(freshStore);
+          }
+        } else {
+          sandstormSecAccum = 0;
+        }
         excavationSystem.update(
           dt,
           stateId,
@@ -620,6 +911,7 @@ export default function App(): ReactElement {
           freshStore,
           openingElapsedSeconds
         );
+        lootPickupSystem.update(dt, stateId);
         combatCoordinator.update(dt, stateId, freshStore, freshStore, {
           routeSnap,
           walkerRig: renderer.walkerRig,
@@ -707,6 +999,18 @@ export default function App(): ReactElement {
           });
         }
 
+        const burstState = combatCoordinator.getExpeditionBurstState();
+        const burstKey = `${burstState.ready ? 1 : 0}:${Math.ceil(burstState.cooldownRemainingSec * 10)}:${burstState.count}`;
+        if (burstKey !== lastBurstKey) {
+          lastBurstKey = burstKey;
+          setExpeditionBurstUi({
+            ready: burstState.ready,
+            cooldownRemainingSec: burstState.cooldownRemainingSec,
+            cooldownRatio: burstState.cooldownRatio,
+            count: burstState.count,
+          });
+        }
+
         const latestStore = useGameStore.getState();
 
         const routeSnap = routeSystem.getSnapshot();
@@ -719,7 +1023,9 @@ export default function App(): ReactElement {
         const nextRelayVisible = hazardSystem.isRelayTowerAvailable(
           stateId,
           latestStore.meta.currentAct,
-          latestStore.meta.currentOasisIndex
+          latestStore.meta.currentOasisIndex,
+          Boolean(latestStore.endgame?.endlessActive),
+          latestStore.endgame?.currentDepth ?? 1
         );
         if (nextRelayVisible !== lastRelayVisible) {
           lastRelayVisible = nextRelayVisible;
@@ -759,6 +1065,7 @@ export default function App(): ReactElement {
           forceTurretPreview,
           renderCombatLayer: (ctx) => {
             excavationSystem.render(ctx);
+            lootPickupSystem.render(ctx);
             combatCoordinator.render(ctx, useGameStore.getState());
           },
           renderOverlayLayer: (overlayCtx) => {
@@ -775,7 +1082,21 @@ export default function App(): ReactElement {
       unsubAudioSwitch();
       unsubAudioFire();
       unsubAudioDamage();
+      unsubEnemyKillLoot();
+      unsubBossBreakLoot();
+      unsubAutoUpgradeToast();
+      unsubLootSfx();
+      unsubRelicAppraisedSfx();
+      unsubQuestToast();
+      unsubBurstToast();
+      unsubEndingTriggered();
+      unsubDepthCleared();
       unsubStateResetAim();
+      if (autoToastTimerRef.current !== null) {
+        window.clearTimeout(autoToastTimerRef.current);
+      }
+      questSystem.dispose();
+      autoUpgradeEngine.dispose();
       gameLoop.stop();
       combatCoordinator.dispose();
       combatCoordinatorRef.current = null;
@@ -800,15 +1121,20 @@ export default function App(): ReactElement {
     emergencyReviveState,
     dialogueSystem,
     excavationSystem,
+    lootPickupSystem,
+    autoUpgradeEngine,
+    questSystem,
   ]);
 
   useEffect(() => {
     const unlockOnce = () => {
       soundEngine.unlock();
+      bgmEngine.start(currentFsmStateRef.current);
     };
     window.addEventListener('pointerdown', unlockOnce, { once: true, passive: true });
     window.addEventListener('keydown', unlockOnce, { once: true, passive: true });
     return () => {
+      bgmEngine.stop();
       window.removeEventListener('pointerdown', unlockOnce);
       window.removeEventListener('keydown', unlockOnce);
     };
@@ -825,9 +1151,27 @@ export default function App(): ReactElement {
 
   useEffect(() => subscribeFullscreenChange(setIsFullscreen), []);
 
+  const handleUpdateSettings = (patch: Partial<UserSettings>) => {
+    setUserSettings((prev) => {
+      const next = saveUserSettings({ ...prev, ...patch });
+      soundEngine.setMasterVolume(next.masterVolume);
+      soundEngine.setSfxVolume(next.sfxVolume);
+      soundEngine.setMuted(next.muted);
+      bgmEngine.setVolumes({
+        masterVolume: next.masterVolume,
+        bgmVolume: next.bgmVolume,
+        muted: next.muted,
+      });
+      setHapticsEnabled(next.hapticsEnabled);
+      setIsMuted(next.muted);
+      return next;
+    });
+  };
+
   const handleToggleMute = () => {
-    const next = soundEngine.toggleMute();
-    setIsMuted(next);
+    soundEngine.unlock();
+    bgmEngine.start(currentFsmStateRef.current);
+    handleUpdateSettings({ muted: !soundEngine.isMuted() });
   };
 
   const handleToggleFullscreen = () => {
@@ -1060,7 +1404,9 @@ export default function App(): ReactElement {
       !hazardSystem.isRelayTowerAvailable(
         stateId,
         store.meta.currentAct,
-        store.meta.currentOasisIndex
+        store.meta.currentOasisIndex,
+        Boolean(store.endgame?.endlessActive),
+        store.endgame?.currentDepth ?? 1
       )
     ) {
       return;
@@ -1082,7 +1428,9 @@ export default function App(): ReactElement {
         !hazardSystem.isRelayTowerAvailable(
           activeStateId,
           current.meta.currentAct,
-          current.meta.currentOasisIndex
+          current.meta.currentOasisIndex,
+          Boolean(current.endgame?.endlessActive),
+          current.endgame?.currentDepth ?? 1
         )
       ) {
         setRelayBannerVisible(false);
@@ -1208,6 +1556,63 @@ export default function App(): ReactElement {
     }
   };
 
+  const handleMerchantRerollAd = () => {
+    if (merchantRerollPending || adSimOpenRef.current) return;
+    const store = useGameStore.getState();
+    setMerchantRerollPending(true);
+    store.resetDailySkipTickets();
+    const latestState = useGameStore.getState();
+    const result = processRewardedAdRequest(latestState, 'MERCHANT_REROLL');
+
+    const finalize = () => {
+      setMerchantRerollPending(false);
+      wanderingMerchantSystem.rerollOffers(
+        latestState.meta.currentOasisIndex,
+        latestState.meta.currentAct,
+        true
+      );
+      setMerchantRefreshTick((n) => n + 1);
+    };
+
+    if (result.granted) {
+      if (result.usedTicket) {
+        useGameStore.getState().consumeDailySkipTicket();
+      }
+      finalize();
+    } else {
+      adSimulator.showRewarded(result.simulationDurationSeconds, finalize);
+    }
+  };
+
+  const handleExpeditionBurst = () => {
+    const coordinator = combatCoordinatorRef.current;
+    if (!coordinator) return;
+    const store = useGameStore.getState();
+    if (
+      coordinator.triggerExpeditionBurst(
+        store,
+        store,
+        fsm.getCurrentStateId(),
+        particlePoolRef.current ?? undefined,
+        cameraSystemRef.current ?? undefined
+      )
+    ) {
+      const bs = coordinator.getExpeditionBurstState();
+      setExpeditionBurstUi({
+        ready: bs.ready,
+        cooldownRemainingSec: bs.cooldownRemainingSec,
+        cooldownRatio: bs.cooldownRatio,
+        count: bs.count,
+      });
+    }
+  };
+
+  const merchantOffers = useMemo(
+    () => wanderingMerchantSystem.getOffers(currentOasisIndex, currentAct),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [wanderingMerchantSystem, currentOasisIndex, currentAct, merchantRefreshTick]
+  );
+
   const oasisDef = getOasisDefinition(currentOasisIndex);
   const usedCargoUnits = cargo.reduce((sum, item) => sum + item.qty, 0);
   const parsedTradeQty = parseInt(tradeQtyInput, 10);
@@ -1241,7 +1646,31 @@ export default function App(): ReactElement {
 
   const unlockedMercCount = mercenaries.filter((m) => m.isUnlocked).length;
   const surgePercent = Math.round(nextOasisPriceRate * 100);
+  const codexBonuses = useMemo(
+    () => computeRelicCodexBonuses(relicCodex, explorerPassives),
+    [relicCodex, explorerPassives]
+  );
+  const completedQuestIds = questsState?.completedIds ?? [];
+  const urgentDelivery = questsState?.urgentDelivery;
+  const urgentRemainingSec = urgentDelivery?.active
+    ? Math.max(0, urgentDelivery.timeLimitSec - (totalPlaySeconds - urgentDelivery.startedAtPlaySec))
+    : 0;
+  const surgeJackpot = isSurgeJackpot(nextOasisPriceRate);
   const hasReadyRelic = pendingRelics.some((r) => r.appraiseEndsAt <= codexNowMs);
+  const templeGate = useMemo(
+    () => evaluateTempleGate({ mapFragments, templeKeys }),
+    [mapFragments, templeKeys]
+  );
+  const depthMods = useMemo(
+    () => getDepthModifiers(endgame?.currentDepth ?? 1),
+    [endgame?.currentDepth]
+  );
+  const totalEnemyKills = progression
+    ? progression.counters.killsByTurret.HEAT_RAY +
+      progression.counters.killsByTurret.HARPOON +
+      progression.counters.killsByTurret.MORTAR
+    : 0;
+
   const isTacticalCombatState =
     currentFsmState !== 'OASIS_HUB' &&
     currentFsmState !== 'OASIS_SETTLEMENT' &&
@@ -1273,7 +1702,9 @@ export default function App(): ReactElement {
                 [출발] {routeDef.fromOasisName} ➔ [도착] {routeDef.toOasisName}
               </span>
               <span data-testid="hud-act-badge" className="hud-act-badge">
-                Act {currentAct}
+                {endgame?.endlessActive
+                  ? `심층 D${endgame.currentDepth}`
+                  : `Act ${currentAct}`}
               </span>
             </div>
 
@@ -1352,6 +1783,19 @@ export default function App(): ReactElement {
                 onClick={handleToggleMute}
               >
                 {isMuted ? '🔇' : '🔊'}
+              </button>
+              <button
+                type="button"
+                className="hud-settings-btn"
+                data-testid="hud-settings-btn"
+                aria-label="설정 열기"
+                title="환경 설정"
+                onClick={() => {
+                  triggerHaptic(10);
+                  setSettingsOpen(true);
+                }}
+              >
+                🎛️
               </button>
               {fullscreenSupported && (
                 <button
@@ -1455,15 +1899,37 @@ export default function App(): ReactElement {
             </>
           )}
 
+          {autoUpgradeToast && (
+            <div data-testid="auto-upgrade-toast" className="auto-upgrade-toast">
+              ⚡ <strong>{autoUpgradeToast.targetLabel}</strong> {autoUpgradeToast.fromValue} ➔{' '}
+              {autoUpgradeToast.toValue} · <span>{autoUpgradeToast.triggerReason}</span>
+            </div>
+          )}
+
           {/* Oasis Hub Sortie CTA */}
           {currentFsmState === 'OASIS_HUB' && (
-            <button
-              data-testid="sortie-btn"
-              className="sortie-btn"
-              onClick={handleSortie}
-            >
-              🚩 출격하기
-            </button>
+            <>
+              {currentAct === 4 &&
+                currentOasisIndex >= 11 &&
+                !endgame?.endingCompleted && (
+                  <div className="temple-gate-banner" data-testid="temple-gate-banner">
+                    <span>
+                      ⛩️ 태양 신전 봉인: 지도 조각 {templeGate.mapFragments}/10 · 열쇠{' '}
+                      {templeGate.templeKeys}/3
+                    </span>
+                    {!templeGate.canUnlock && (
+                      <span className="dash-sub"> · {templeGate.missingGuides[0]}</span>
+                    )}
+                  </div>
+                )}
+              <button
+                data-testid="sortie-btn"
+                className="sortie-btn"
+                onClick={handleSortie}
+              >
+                🚩 출격하기
+              </button>
+            </>
           )}
 
           {relayBannerVisible && (
@@ -1707,10 +2173,7 @@ export default function App(): ReactElement {
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 >
                   <span>기체 개조</span>
-                  <div className="dash-actions">
-                    <span className="dash-sub">
-                      {adTier >= 3 ? 'VIP T3 영구 특전' : 'VIP T3 특전'}
-                    </span>
+                  <div className="dash-actions" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <button
                       data-testid="btn-equip-skin-pharaoh"
                       className={`dash-btn ${equippedSkinId === 'GOLDEN_PHARAOH' ? 'skin-active' : 'secondary'}`}
@@ -1726,10 +2189,52 @@ export default function App(): ReactElement {
                       }}
                     >
                       {equippedSkinId === 'GOLDEN_PHARAOH'
-                        ? '👑 황금 파라오 장착 중'
-                        : '👑 황금 파라오 스킨'}
+                        ? '👑 황금 파라오 중'
+                        : '👑 황금 파라오'}
+                    </button>
+                    <button
+                      data-testid="btn-equip-skin-royal-silk"
+                      className={`dash-btn ${equippedSkinId === 'ROYAL_SILK' ? 'skin-active' : 'secondary'}`}
+                      onClick={() => {
+                        triggerHaptic(12);
+                        useGameStore
+                          .getState()
+                          .setSkin(
+                            equippedSkinId === 'ROYAL_SILK' ? 'DEFAULT' : 'ROYAL_SILK'
+                          );
+                      }}
+                    >
+                      {equippedSkinId === 'ROYAL_SILK'
+                        ? '🧣 왕실 비단 중'
+                        : '🧣 왕실 비단'}
                     </button>
                   </div>
+                </div>
+
+                {/* Auto-Upgrade Policy & Passive Summary */}
+                <div className="auto-policy-row">
+                  <div className="auto-policy-label">
+                    <span>⚡ 자동 성장</span>
+                    <span className="dash-sub" data-testid="explorer-passives-summary">
+                      감정 {explorerPassives?.appraisalLv ?? 1} · 생존{' '}
+                      {explorerPassives?.survivalLv ?? 1} · 비석 {explorerPassives?.linguisticsLv ?? 1}
+                    </span>
+                  </div>
+                  <select
+                    data-testid="auto-invest-policy-select"
+                    className="auto-policy-select"
+                    value={progression?.autoInvestPolicy ?? 'MANUAL'}
+                    onChange={(e) => {
+                      const policy = e.target.value as AutoInvestPolicy;
+                      useGameStore.getState().setAutoInvestPolicy(policy);
+                      autoUpgradeEngine.tryAutoInvest(useGameStore.getState());
+                    }}
+                  >
+                    <option value="MANUAL">수동 골드 (조건·전리품만 자동)</option>
+                    <option value="BALANCED">균형 자동 투자</option>
+                    <option value="COMBAT">전투 우선 자동 투자</option>
+                    <option value="ECONOMY">경제·기동 자동 투자</option>
+                  </select>
                 </div>
 
                 {/* Active Turret Row */}
@@ -1747,6 +2252,23 @@ export default function App(): ReactElement {
                       </span>{' '}
                       (상한 Lv.{turretTierCap})
                     </div>
+                    {(() => {
+                      const ms = getNextMilestoneSummary(fullGameState, 'TURRET', activeTurret);
+                      if (!ms) return null;
+                      return (
+                        <div className="auto-progress-wrap" data-testid="turret-auto-progress">
+                          <span>
+                            {ms.title} ({ms.current}/{ms.target})
+                          </span>
+                          <div className="auto-progress-bar">
+                            <div
+                              className="auto-progress-fill"
+                              style={{ width: `${Math.round(ms.ratio * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="dash-actions">
                     <button
@@ -1793,6 +2315,23 @@ export default function App(): ReactElement {
                         {legPartLevel >= 20 ? 'MAX' : `${legCost}G`}
                       </span>
                     </div>
+                    {(() => {
+                      const ms = getNextMilestoneSummary(fullGameState, 'LEG');
+                      if (!ms) return null;
+                      return (
+                        <div className="auto-progress-wrap" data-testid="leg-auto-progress">
+                          <span>
+                            {ms.title} ({ms.current}/{ms.target})
+                          </span>
+                          <div className="auto-progress-bar">
+                            <div
+                              className="auto-progress-fill"
+                              style={{ width: `${Math.round(ms.ratio * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="dash-actions">
                     <button
@@ -1826,6 +2365,23 @@ export default function App(): ReactElement {
                         {wagonCount >= 5 ? 'MAX' : `${wagonGearCost}⚙️`}
                       </span>
                     </div>
+                    {(() => {
+                      const ms = getNextMilestoneSummary(fullGameState, 'WAGON');
+                      if (!ms) return null;
+                      return (
+                        <div className="auto-progress-wrap" data-testid="wagon-auto-progress">
+                          <span>
+                            {ms.title} ({ms.current}/{ms.target})
+                          </span>
+                          <div className="auto-progress-bar">
+                            <div
+                              className="auto-progress-fill"
+                              style={{ width: `${Math.round(ms.ratio * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="dash-actions">
                     <button
@@ -1842,6 +2398,87 @@ export default function App(): ReactElement {
                     </button>
                   </div>
                 </div>
+
+                {/* Recent Auto-Upgrade Feed */}
+                <div className="auto-upgrade-feed" data-testid="auto-upgrade-feed">
+                  {progression && progression.recentAutoUpgrades.length > 0 ? (
+                    progression.recentAutoUpgrades.slice(0, 3).map((ev) => (
+                      <div key={ev.id} className="auto-upgrade-feed-item">
+                        <span>
+                          ⚡ <strong>{ev.targetLabel}</strong> {ev.fromValue}➔{ev.toValue}
+                        </span>
+                        <span className="dash-sub">{ev.triggerReason}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="dash-sub">
+                      전투 전리품·비석·마일스톤 달성 시 자동 강화 내역이 기록됩니다.
+                    </div>
+                  )}
+                </div>
+
+                {/* Sun Temple Gate (Act 4 before ending) */}
+                {currentAct === 4 && !endgame?.endingCompleted && (
+                  <div className="temple-gate-panel" data-testid="temple-gate-panel">
+                    <div className="codex-section-title">⛩️ 태양 신전 해금 게이트 (Act 4)</div>
+                    <div className="dash-sub">
+                      고대 지도 조각 {templeGate.mapFragments}/10 · 신전의 열쇠{' '}
+                      {templeGate.templeKeys}/3
+                    </div>
+                    {!templeGate.canUnlock && (
+                      <div className="dash-sub" data-testid="temple-gate-guide">
+                        {templeGate.missingGuides.join(' / ')}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      data-testid="btn-unlock-temple-gate"
+                      className="dash-btn"
+                      disabled={!templeGate.canUnlock || currentFsmState !== 'OASIS_HUB'}
+                      onClick={() => {
+                        const store = useGameStore.getState();
+                        if (store.unlockTempleGate()) {
+                          eventBus.emit('endgame:templeUnlocked', {
+                            mapFragments: store.currencies.mapFragments,
+                            templeKeys: store.currencies.templeKeys,
+                          });
+                          triggerHaptic(24);
+                          handleSortie();
+                        }
+                      }}
+                    >
+                      {endgame?.templeGateUnlocked
+                        ? '태양 신전 진입 가능 · 출격하기'
+                        : '태양 신전 봉인 해제 & 최종 결전 출격'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Endless Deep Desert Panel (unlocked after Temple Ending) */}
+                {endgame?.endlessUnlocked && (
+                  <div className="endless-mode-panel" data-testid="endless-mode-panel">
+                    <div className="codex-section-title">
+                      🌌 무한의 심층 사막 (현재 심도 Depth {endgame.currentDepth})
+                    </div>
+                    <div className="dash-sub">
+                      최고 돌파 Depth {endgame.maxDepthCleared} · 변이: {depthMods.mutationLabel} ·
+                      보스 HP x{depthMods.hpMultiplier.toFixed(2)}
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="btn-toggle-endless"
+                      className="dash-btn secondary"
+                      onClick={() => {
+                        useGameStore.getState().toggleEndlessMode(!endgame.endlessActive);
+                        triggerHaptic(16);
+                      }}
+                    >
+                      {endgame.endlessActive
+                        ? '심층 사막 진행 중 (클릭 시 일반 모드 전환)'
+                        : `심층 사막 Depth ${endgame.currentDepth} 활성화`}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1865,13 +2502,29 @@ export default function App(): ReactElement {
                   className={`merc-synergy-banner ${synergyActive ? 'active' : ''}`}
                   data-testid="mercenary-synergy-status"
                 >
-                  {synergyActive
-                    ? '✦ 5인 결속 시너지: 활성 (상단 전체 공격력 +25%, 교역 금화 +20%)'
-                    : `5인 결속 시너지: 비활성 (${unlockedMercCount}/5 해금 — 전원 편성 시 공격력 +25%, 교역 +20%)`}
+                  <span>
+                    {synergyActive
+                      ? '✦ 5인 결속 시너지: 활성 (상단 전체 공격력 +25%, 교역 금화 +20%)'
+                      : `5인 결속 시너지: 비활성 (${unlockedMercCount}/5 해금 — 전원 편성 시 공격력 +25%, 교역 +20%)`}
+                  </span>
+                  {synergyActive && (
+                    <button
+                      data-testid="btn-expedition-burst"
+                      className="btn-expedition-burst"
+                      disabled={!expeditionBurstUi.ready || !isTacticalCombatState}
+                      onClick={handleExpeditionBurst}
+                    >
+                      {expeditionBurstUi.ready
+                        ? '⚡ 5인 합동 필살기'
+                        : `필살기 ${Math.ceil(expeditionBurstUi.cooldownRemainingSec)}s`}
+                    </button>
+                  )}
                 </div>
                 <div className="merc-list">
                   {mercenaries.map((merc) => {
                     const def = MERCENARY_DEFINITIONS[merc.id as MercenaryId];
+                    const equipDef = MERC_EQUIPMENT_CATALOG[merc.id as MercenaryId];
+                    const eqSlot = mercEquipment?.[merc.id];
                     const mercCost = upgradeCost(merc.level);
                     return (
                       <div
@@ -1888,6 +2541,14 @@ export default function App(): ReactElement {
                             {merc.isUnlocked
                               ? def?.effectSummary
                               : def?.unlockHint ?? '진행 시 합류'}
+                          </div>
+                          <div
+                            className="merc-equip-pill"
+                            data-testid={`merc-equip-${merc.id}`}
+                          >
+                            {eqSlot
+                              ? `전용장비: ${equipDef?.name ?? merc.id} [${EQUIPMENT_RARITY_LABELS[eqSlot.rarity]}] Lv.${eqSlot.level}`
+                              : `전용장비 미착용 (${equipDef?.name ?? ''})`}
                           </div>
                         </div>
                         <div className="dash-actions">
@@ -1927,13 +2588,49 @@ export default function App(): ReactElement {
                   className="card-title"
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 >
-                  <span>상단 교역소 — {oasisDef.name}</span>
+                  <span>
+                    상단 교역소 — {oasisDef.name}
+                    {surgeJackpot && (
+                      <span data-testid="surge-jackpot-pill" className="surge-jackpot-pill">
+                        🔥 시세 대박 +{surgePercent}%
+                      </span>
+                    )}
+                  </span>
                   <button
                     data-testid="zafar-call-btn"
                     className="dash-btn secondary"
                     onClick={handleZafarCall}
                   >
                     🐫 자파르 호출
+                  </button>
+                </div>
+
+                {/* Daily Urgent Delivery Timed Quest */}
+                {endgame?.goldenTradeActive && (
+                  <div className="golden-trade-badge" data-testid="golden-trade-badge">
+                    🌟 대륙 횡단 황금 교역로 활성 (최대 400% 시세 이벤트 적용)
+                  </div>
+                )}
+                <div className="urgent-delivery-card" data-testid="urgent-delivery-card">
+                  <div className="dash-info">
+                    <strong>🚑 긴급 물자 운송 (일일 타임어택)</strong>
+                    <span className="dash-sub">
+                      {urgentDelivery?.active
+                        ? `진행 중 · 남은 제한시간 ${urgentRemainingSec}초 (성공 시 +${URGENT_DELIVERY_REWARD_GOLD}G + 포탑부품)`
+                        : `120초 내 다음 오아시스 도착 시 +${URGENT_DELIVERY_REWARD_GOLD}G + 자동 강화 (완료 ${urgentDelivery?.completedCount ?? 0}회)`}
+                    </span>
+                  </div>
+                  <button
+                    data-testid="btn-start-urgent-delivery"
+                    className="dash-btn secondary"
+                    disabled={Boolean(urgentDelivery?.active) || currentFsmState !== 'OASIS_HUB'}
+                    onClick={() => {
+                      if (useGameStore.getState().startUrgentDelivery(120)) {
+                        triggerHaptic(15);
+                      }
+                    }}
+                  >
+                    {urgentDelivery?.active ? '임무 중' : '임무 수락'}
                   </button>
                 </div>
                 <div className="dash-row">
@@ -2062,12 +2759,74 @@ export default function App(): ReactElement {
                       .join(' · ')}
                   </div>
                 )}
+
+                <div
+                  className="wandering-merchant-panel"
+                  data-testid="wandering-merchant-panel"
+                >
+                  <div className="codex-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>떠돌이 상인 특별 품목</span>
+                    <button
+                      data-testid="btn-merchant-reroll"
+                      className="dash-btn secondary"
+                      disabled={merchantRerollPending}
+                      onClick={handleMerchantRerollAd}
+                    >
+                      {merchantRerollPending ? '갱신 중...' : '희귀 목록 갱신 (광고/스킵)'}
+                    </button>
+                  </div>
+                  {merchantOffers.map((offer, idx) => {
+                    const canBuyOffer = !offer.purchased && sunGold >= offer.costGold;
+                    return (
+                      <div
+                        key={offer.id}
+                        data-testid={`merchant-offer-${idx}`}
+                        className="merchant-offer-row"
+                      >
+                        <div className="dash-info">
+                          <strong>{offer.title}</strong>
+                          <span className="dash-sub">{offer.subtitle}</span>
+                        </div>
+                        <button
+                          data-testid={`btn-buy-merchant-${idx}`}
+                          className="dash-btn"
+                          disabled={!canBuyOffer}
+                          onClick={() => {
+                            if (
+                              wanderingMerchantSystem.purchaseOffer(
+                                offer.id,
+                                useGameStore.getState(),
+                                autoUpgradeEngine
+                              )
+                            ) {
+                              triggerHaptic(16);
+                              setMerchantRefreshTick((n) => n + 1);
+                            }
+                          }}
+                        >
+                          {offer.purchased ? '구매 완료' : `${offer.costGold}G`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             {activeTab === 'RELICS' && (
               <div className="tab-placeholder-card">
                 <div className="card-title">유물·비석 도감 (Relic Codex & Steles)</div>
+                <div data-testid="codex-passive-banner" className="codex-passive-banner">
+                  <span>
+                    포탑 +{Math.round(codexBonuses.turretDamagePct * 100)}% · 치명 +
+                    {Math.round(codexBonuses.critChancePct * 100)}%
+                  </span>
+                  <span>
+                    교역 +{Math.round(codexBonuses.tradeGoldPct * 100)}% · 폭풍감소{' '}
+                    {Math.round(codexBonuses.stormResistPct * 100)}% · 발굴 +
+                    {Math.round(codexBonuses.excavateSpeedPct * 100)}%
+                  </span>
+                </div>
                 <div data-testid="codex-stele-list">
                   • 해독된 고대 비석: {decodedSteleCount} / {STELE_DEFINITIONS.length}개
                 </div>
@@ -2129,11 +2888,47 @@ export default function App(): ReactElement {
                         <PixelIconCanvas relicId={def.id} size={22} />
                         <div>
                           <div style={{ fontWeight: 700, color: unlocked ? '#fef08a' : '#a0aec0' }}>
-                            {unlocked ? def.name : '???'}
+                            {unlocked ? def.name : '???'}{' '}
+                            <span className={`rarity-badge rarity-${def.rarity}`}>
+                              {RELIC_RARITY_LABELS[def.rarity]}
+                            </span>
                           </div>
-                          <div style={{ opacity: 0.8 }}>
-                            {unlocked ? def.description : '사막 발굴로 해금'}
+                          <div style={{ opacity: 0.85 }}>
+                            {unlocked ? `${def.bonusSummary} · ${def.description}` : '사막 발굴로 해금'}
                           </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="codex-section-title">
+                  원정 퀘스트 ({completedQuestIds.length} / {QUEST_DEFINITIONS.length} 완료)
+                </div>
+                <div data-testid="quest-board" className="quest-board">
+                  {QUEST_DEFINITIONS.filter((q) => q.act <= Math.max(1, currentAct)).map((q) => {
+                    const done = completedQuestIds.includes(q.id);
+                    const prog = done ? q.target : Math.min(q.target, q.readProgress(fullGameState));
+                    return (
+                      <div
+                        key={q.id}
+                        data-testid={`quest-row-${q.id}`}
+                        className={`quest-row ${done ? 'done' : ''}`}
+                      >
+                        <div className="dash-info">
+                          <div>
+                            <span
+                              className={
+                                q.kind === 'MAIN' ? 'quest-badge-main' : 'quest-badge-sub'
+                              }
+                            >
+                              {q.kind === 'MAIN' ? `Act${q.act} 메인` : `Act${q.act} 서브`}
+                            </span>{' '}
+                            <strong>{q.title}</strong> ({prog}/{q.target})
+                          </div>
+                          <span className="dash-sub">
+                            {done ? '✓ 보상 자동 적용 완료' : `보상: ${q.rewardLabel}`}
+                          </span>
                         </div>
                       </div>
                     );
@@ -2273,6 +3068,11 @@ export default function App(): ReactElement {
             <div className="modal-dialog">
               <div className="modal-title">🏜️ 오아시스 도착 정산</div>
               <div className="modal-body">
+                {endgame?.pendingEndingModal && (
+                  <div className="golden-trade-badge" style={{ marginBottom: '8px' }}>
+                    🏆 태양 신전 탈환 성공! 정산 후 엔딩 시퀀스가 재생됩니다.
+                  </div>
+                )}
                 <p>교역 화물을 시세에 맞춰 모두 매각했습니다!</p>
                 <div
                   data-testid="settlement-profit"
@@ -2437,6 +3237,96 @@ export default function App(): ReactElement {
             </div>
           </div>
         )}
+
+        {/* Modal: Sun Temple Reclaim Ending Sequence */}
+        {currentFsmState === 'OASIS_HUB' && endgame?.pendingEndingModal && (
+          <div
+            className="modal-overlay"
+            data-testid="ending-sequence-modal"
+          >
+            <div className="modal-dialog ending-modal-dialog">
+              <div className="modal-title">🏆 태양 신전 탈환 완료 — 대서사 엔딩</div>
+              <div className="modal-body">
+                <div className="ending-epilogue-list">
+                  {TEMPLE_ENDING_EPILOGUE_LINES.map((line, idx) => (
+                    <div key={idx} className="ending-epilogue-line">
+                      <strong>[{line.speaker}]</strong> {line.text}
+                    </div>
+                  ))}
+                </div>
+                <div className="ending-stats-grid" data-testid="ending-stats-grid">
+                  <div>여정 시간: {Math.floor(totalPlaySeconds / 60)}분 {totalPlaySeconds % 60}초</div>
+                  <div>총 적 처치: {totalEnemyKills}기</div>
+                  <div>해독 비석: {decodedSteleCount}/3</div>
+                  <div>유물 도감: {relicCodexCount}/20</div>
+                  <div>용병 결속: {unlockedMercCount}/5</div>
+                  <div>
+                    누적 교역: {(progression?.counters.totalTradeProfit ?? 0).toLocaleString()}G
+                  </div>
+                </div>
+                <div className="golden-trade-badge" style={{ marginTop: '8px' }}>
+                  ✨ 기념 유물 [태양 신전의 심장 ({TEMPLE_COMMEMORATIVE_RELIC_ID})] 도감 자동 등록 · 대륙 횡단 황금 교역로 해금!
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  data-testid="btn-close-ending"
+                  className="modal-btn modal-btn-secondary"
+                  onClick={() => useGameStore.getState().dismissEndingModal(false)}
+                >
+                  오아시스 정비로
+                </button>
+                <button
+                  type="button"
+                  data-testid="btn-enter-endless"
+                  className="modal-btn modal-btn-primary"
+                  onClick={() => {
+                    useGameStore.getState().dismissEndingModal(true);
+                    triggerHaptic(24);
+                  }}
+                >
+                  🌌 무한의 심층 사막 출정 (Depth 1)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Unified User Settings */}
+        <SettingsModal
+          isOpen={settingsOpen}
+          settings={userSettings}
+          autoInvestPolicy={progression?.autoInvestPolicy ?? 'MANUAL'}
+          saveJsonInput={saveJsonInput}
+          saveBackupStatus={saveBackupStatus}
+          onUpdateSettings={handleUpdateSettings}
+          onChangeAutoInvestPolicy={(policy) => {
+            useGameStore.getState().setAutoInvestPolicy(policy);
+            triggerHaptic(10);
+          }}
+          onChangeSaveJsonInput={setSaveJsonInput}
+          onExportSave={() => {
+            const json = SaveManager.exportSaveJson();
+            setSaveJsonInput(json);
+            setSaveBackupStatus('세이브 JSON이 생성되었습니다.');
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(json).catch(() => {});
+            }
+          }}
+          onImportSave={() => {
+            const res = SaveManager.importSaveJson(saveJsonInput);
+            setSaveBackupStatus(
+              res.success
+                ? '세이브 불러오기 완료!'
+                : res.error ?? '세이브 불러오기에 실패했습니다.'
+            );
+            if (res.success) {
+              triggerHaptic(20);
+            }
+          }}
+          onClose={() => setSettingsOpen(false)}
+        />
 
         {/* Modal: Ad Simulator (rendered after standard modals with higher z-index) */}
         {adSimState.isOpen && (

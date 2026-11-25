@@ -10,14 +10,58 @@ import {
   CurrenciesState,
   DailyMissionId,
   DailyMissionsState,
+  AutoInvestPolicy,
+  AutoUpgradeEventRecord,
+  ExplorerPassivesState,
+  ProgressionCounters,
+  ProgressionState,
+  QuestsState,
+  EndgameState,
+  EquipmentRarity,
 } from './types';
-import { getDefaultState, getTodayDateString } from './defaults';
+import { resolveEquipmentAcquisition } from '../game/data/equipment';
+import {
+  TEMPLE_COMMEMORATIVE_RELIC_ID,
+  TEMPLE_GATE_KEYS,
+  TEMPLE_GATE_MAP_FRAGMENTS,
+} from '../engine/systems/EndlessExpeditionSystem';
+import {
+  getDefaultState,
+  getTodayDateString,
+  createInitialProgressionState,
+  createInitialExplorerPassives,
+  createInitialQuestsState,
+  createDefaultEndgameState,
+} from './defaults';
 import {
   createInitialDailyMissions,
   getDailyMissionDefinition,
 } from '../game/data/dailyMissions';
 import { upgradeCost, tierUpGearCost, tradeSellPayout } from '../game/formulas';
 import { SaveManager } from '../persistence/saveManager';
+
+function ensureProgression(current: ProgressionState | undefined): ProgressionState {
+  if (!current || !current.counters || !current.counters.killsByTurret) {
+    return createInitialProgressionState();
+  }
+  return current;
+}
+
+function ensureExplorerPassives(
+  current: ExplorerPassivesState | undefined
+): ExplorerPassivesState {
+  if (!current) {
+    return createInitialExplorerPassives();
+  }
+  return current;
+}
+
+function ensureQuests(current: QuestsState | undefined): QuestsState {
+  if (!current || !Array.isArray(current.completedIds) || !current.urgentDelivery) {
+    return createInitialQuestsState();
+  }
+  return current;
+}
 
 function ensureTodayMissions(
   current: DailyMissionsState | undefined,
@@ -498,7 +542,7 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()((set, ge
 
   setSkin: (skinId: SkinId) =>
     set((state) => {
-      if (skinId !== 'DEFAULT' && skinId !== 'GOLDEN_PHARAOH') {
+      if (skinId !== 'DEFAULT' && skinId !== 'GOLDEN_PHARAOH' && skinId !== 'ROYAL_SILK') {
         return state;
       }
       if (state.monetization.equippedSkinId === skinId) return state;
@@ -683,6 +727,374 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()((set, ge
       },
     }));
     return true;
+  },
+
+  // --------------------------------------------------------------------------
+  // Auto-Upgrade & Progression Actions
+  // --------------------------------------------------------------------------
+  setAutoInvestPolicy: (policy: AutoInvestPolicy) =>
+    set((state) => ({
+      progression: {
+        ...ensureProgression(state.progression),
+        autoInvestPolicy: policy,
+      },
+    })),
+
+  incrementProgressionCounter: (
+    counter: Exclude<keyof ProgressionCounters, 'killsByTurret'>,
+    delta = 1
+  ) =>
+    set((state) => {
+      const safeDelta = Number.isFinite(delta) && delta > 0 ? Math.floor(delta) : 0;
+      if (safeDelta <= 0) return state;
+      const prog = ensureProgression(state.progression);
+      return {
+        progression: {
+          ...prog,
+          counters: {
+            ...prog.counters,
+            [counter]: prog.counters[counter] + safeDelta,
+          },
+        },
+      };
+    }),
+
+  incrementTurretKillCounter: (turret: TurretType, delta = 1) =>
+    set((state) => {
+      const safeDelta = Number.isFinite(delta) && delta > 0 ? Math.floor(delta) : 0;
+      if (safeDelta <= 0) return state;
+      const prog = ensureProgression(state.progression);
+      return {
+        progression: {
+          ...prog,
+          counters: {
+            ...prog.counters,
+            killsByTurret: {
+              ...prog.counters.killsByTurret,
+              [turret]: (prog.counters.killsByTurret[turret] ?? 0) + safeDelta,
+            },
+          },
+        },
+      };
+    }),
+
+  markMilestoneCompleted: (milestoneId: string) => {
+    const prog = ensureProgression(get().progression);
+    if (prog.completedMilestones.includes(milestoneId)) {
+      return false;
+    }
+    set((state) => {
+      const curr = ensureProgression(state.progression);
+      if (curr.completedMilestones.includes(milestoneId)) return state;
+      return {
+        progression: {
+          ...curr,
+          completedMilestones: [...curr.completedMilestones, milestoneId],
+        },
+      };
+    });
+    return true;
+  },
+
+  recordAutoUpgradeEvent: (event: AutoUpgradeEventRecord) =>
+    set((state) => {
+      const prog = ensureProgression(state.progression);
+      return {
+        progression: {
+          ...prog,
+          recentAutoUpgrades: [event, ...prog.recentAutoUpgrades].slice(0, 15),
+        },
+      };
+    }),
+
+  grantFreeTurretLevel: (turret: TurretType) => {
+    const { sandwalker } = get();
+    const curLevel = sandwalker.turretLevels[turret];
+    const curTier = sandwalker.turretTiers[turret];
+    if (curLevel === undefined || curTier === undefined) return false;
+    if (curLevel >= 30 || curLevel >= curTier * 10) return false;
+
+    set((state) => ({
+      sandwalker: {
+        ...state.sandwalker,
+        turretLevels: {
+          ...state.sandwalker.turretLevels,
+          [turret]: state.sandwalker.turretLevels[turret] + 1,
+        },
+      },
+      dailyMissions: advanceMissionState(state.dailyMissions, 'UPGRADE_UNIT', 1),
+    }));
+    return true;
+  },
+
+  grantFreeTurretTier: (turret: TurretType) => {
+    const { sandwalker } = get();
+    const curLevel = sandwalker.turretLevels[turret];
+    const curTier = sandwalker.turretTiers[turret];
+    if (curLevel === undefined || curTier === undefined) return false;
+    if (curTier >= 3 || curLevel < curTier * 10) return false;
+
+    set((state) => ({
+      sandwalker: {
+        ...state.sandwalker,
+        turretTiers: {
+          ...state.sandwalker.turretTiers,
+          [turret]: state.sandwalker.turretTiers[turret] + 1,
+        },
+      },
+    }));
+    return true;
+  },
+
+  grantFreeLegLevel: (minTargetLevel = 1) => {
+    const { sandwalker } = get();
+    if (sandwalker.legPartLevel >= 20) return false;
+    const nextLevel = Math.min(20, Math.max(sandwalker.legPartLevel + 1, Math.floor(minTargetLevel)));
+    if (nextLevel <= sandwalker.legPartLevel) return false;
+
+    set((state) => ({
+      sandwalker: {
+        ...state.sandwalker,
+        legPartLevel: nextLevel,
+      },
+      dailyMissions: advanceMissionState(state.dailyMissions, 'UPGRADE_UNIT', 1),
+    }));
+    return true;
+  },
+
+  grantFreeWagon: () => {
+    const { sandwalker } = get();
+    if (sandwalker.wagonCount >= 5) return false;
+
+    set((state) => {
+      const nextWagons = state.sandwalker.wagonCount + 1;
+      return {
+        sandwalker: {
+          ...state.sandwalker,
+          wagonCount: nextWagons,
+          cargoCapacity: nextWagons * 50,
+        },
+      };
+    });
+    return true;
+  },
+
+  grantFreeMercenaryLevel: (mercId?: string) => {
+    const { mercenaries } = get();
+    const unlocked = mercenaries.filter((m) => m.isUnlocked && m.level < 30);
+    if (unlocked.length === 0) return null;
+
+    const target = mercId
+      ? unlocked.find((m) => m.id === mercId)
+      : [...unlocked].sort((a, b) => a.level - b.level)[0];
+    if (!target) return null;
+
+    set((state) => ({
+      mercenaries: state.mercenaries.map((m) =>
+        m.id === target.id ? { ...m, level: m.level + 1 } : m
+      ),
+      dailyMissions: advanceMissionState(state.dailyMissions, 'UPGRADE_UNIT', 1),
+    }));
+    return target.id;
+  },
+
+  grantExplorerPassiveLevel: (passiveKey: keyof ExplorerPassivesState) => {
+    const passives = ensureExplorerPassives(get().explorerPassives);
+    const cur = passives[passiveKey];
+    if (cur >= 20) return false;
+
+    set((state) => {
+      const base = ensureExplorerPassives(state.explorerPassives);
+      return {
+        explorerPassives: {
+          ...base,
+          [passiveKey]: Math.min(20, base[passiveKey] + 1),
+        },
+      };
+    });
+    return true;
+  },
+
+  // --------------------------------------------------------------------------
+  // Quest Actions (Phase 2)
+  // --------------------------------------------------------------------------
+  completeQuest: (questId: string) => {
+    const base = ensureQuests(get().quests);
+    if (base.completedIds.includes(questId)) return false;
+
+    set((state) => {
+      const curr = ensureQuests(state.quests);
+      if (curr.completedIds.includes(questId)) return state;
+      return {
+        quests: {
+          ...curr,
+          completedIds: [...curr.completedIds, questId],
+        },
+      };
+    });
+    return true;
+  },
+
+  startUrgentDelivery: (timeLimitSec = 120) => {
+    const state = get();
+    const curr = ensureQuests(state.quests);
+    if (curr.urgentDelivery.active) return false;
+
+    const safeLimit = Number.isFinite(timeLimitSec) && timeLimitSec >= 30 ? Math.floor(timeLimitSec) : 120;
+    set((s) => {
+      const q = ensureQuests(s.quests);
+      return {
+        quests: {
+          ...q,
+          urgentDelivery: {
+            ...q.urgentDelivery,
+            active: true,
+            startedAtPlaySec: s.meta.totalPlaySeconds,
+            timeLimitSec: safeLimit,
+          },
+        },
+      };
+    });
+    return true;
+  },
+
+  resolveUrgentDelivery: (succeeded: boolean) =>
+    set((state) => {
+      const curr = ensureQuests(state.quests);
+      if (!curr.urgentDelivery.active) return state;
+      return {
+        quests: {
+          ...curr,
+          urgentDelivery: {
+            ...curr.urgentDelivery,
+            active: false,
+            completedCount: succeeded
+              ? curr.urgentDelivery.completedCount + 1
+              : curr.urgentDelivery.completedCount,
+          },
+        },
+      };
+    }),
+
+  acquireMercenaryEquipment: (mercId: string, rarity: EquipmentRarity) => {
+    const current = get().mercEquipment?.[mercId];
+    const resolved = resolveEquipmentAcquisition(current, rarity);
+    set((state) => ({
+      mercEquipment: {
+        ...(state.mercEquipment ?? {}),
+        [mercId]: resolved.nextSlot,
+      },
+      dailyMissions:
+        resolved.action === 'EQUIPPED' ||
+        resolved.action === 'UPGRADED_RARITY' ||
+        resolved.action === 'DISMANTLED_LEVEL_UP'
+          ? advanceMissionState(state.dailyMissions, 'UPGRADE_UNIT', 1)
+          : state.dailyMissions,
+    }));
+    return {
+      action: resolved.action,
+      fromLabel: resolved.fromLabel,
+      toLabel: resolved.toLabel,
+      slot: resolved.nextSlot,
+    };
+  },
+
+  unlockTempleGate: () => {
+    const state = get();
+    if (
+      state.currencies.mapFragments < TEMPLE_GATE_MAP_FRAGMENTS ||
+      state.currencies.templeKeys < TEMPLE_GATE_KEYS
+    ) {
+      return false;
+    }
+    set((s) => {
+      const cur: EndgameState = s.endgame ?? createDefaultEndgameState();
+      return {
+        endgame: {
+          ...cur,
+          templeGateUnlocked: true,
+        },
+      };
+    });
+    return true;
+  },
+
+  triggerTempleEnding: () => {
+    const state = get();
+    const current: EndgameState = state.endgame ?? createDefaultEndgameState();
+    if (current.endingCompleted) {
+      return false;
+    }
+    set((s) => {
+      const cur: EndgameState = s.endgame ?? createDefaultEndgameState();
+      const nextCodex = s.relics.codex.includes(TEMPLE_COMMEMORATIVE_RELIC_ID)
+        ? s.relics.codex
+        : [...s.relics.codex, TEMPLE_COMMEMORATIVE_RELIC_ID];
+      return {
+        relics: {
+          ...s.relics,
+          codex: nextCodex,
+        },
+        endgame: {
+          ...cur,
+          templeGateUnlocked: true,
+          endingCompleted: true,
+          pendingEndingModal: true,
+          endlessUnlocked: true,
+          goldenTradeActive: true,
+        },
+      };
+    });
+    return true;
+  },
+
+  dismissEndingModal: (enterEndless = false) =>
+    set((s) => {
+      const cur: EndgameState = s.endgame ?? createDefaultEndgameState();
+      return {
+        endgame: {
+          ...cur,
+          pendingEndingModal: false,
+          endlessActive: enterEndless ? true : cur.endlessActive,
+          currentDepth: Math.max(1, cur.currentDepth),
+          goldenTradeActive: cur.goldenTradeActive || enterEndless,
+        },
+      };
+    }),
+
+  toggleEndlessMode: (active: boolean) => {
+    const cur: EndgameState = get().endgame ?? createDefaultEndgameState();
+    if (active && !cur.endlessUnlocked) {
+      return false;
+    }
+    set((s) => {
+      const prev: EndgameState = s.endgame ?? createDefaultEndgameState();
+      return {
+        endgame: {
+          ...prev,
+          endlessActive: active,
+          currentDepth: Math.max(1, prev.currentDepth),
+        },
+      };
+    });
+    return true;
+  },
+
+  advanceEndlessDepth: () => {
+    const prev: EndgameState = get().endgame ?? createDefaultEndgameState();
+    const clearedDepth = Math.max(1, prev.currentDepth);
+    const nextDepth = clearedDepth + 1;
+    set((s) => {
+      const cur: EndgameState = s.endgame ?? createDefaultEndgameState();
+      return {
+        endgame: {
+          ...cur,
+          currentDepth: nextDepth,
+          maxDepthCleared: Math.max(cur.maxDepthCleared, clearedDepth),
+        },
+      };
+    });
+    return { clearedDepth, nextDepth };
   },
 
   // --------------------------------------------------------------------------

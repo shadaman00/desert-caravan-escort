@@ -14,7 +14,7 @@ import { TurretSystem } from './TurretSystem';
 import { MercenarySystem } from './MercenarySystem';
 import { SpawnSystem } from './SpawnSystem';
 import { BossSystem, type BossDebugSnapshot } from './BossSystem';
-import { evasionCooldown, isExpeditionSynergyActive } from '@/game/formulas';
+import { evasionCooldown, isExpeditionSynergyActive, statAt } from '@/game/formulas';
 import {
   drawPixelHarpoons,
   drawPixelHeatRayBeam,
@@ -34,6 +34,8 @@ export const DODGE_BOOST_DURATION_SEC = 1.5;
 export const DODGE_BOOST_SPEED_MULTIPLIER = 1.6;
 export const TACTICAL_SHIELD_FRACTION = 0.2;
 export const TACTICAL_SHIELD_COOLDOWN_SEC = 12.0;
+export const EXPEDITION_BURST_COOLDOWN_SEC = 18.0;
+export const EXPEDITION_BURST_BASE_DAMAGE = 120;
 
 export interface CombatStoreSink {
   applyDamage: (amount: number) => { shieldAbsorbed: number; hpDamage: number; isDestroyed: boolean };
@@ -95,6 +97,8 @@ export interface CombatDebugSnapshot {
   relayTowerVisible: boolean;
   boss: BossDebugSnapshot | null;
   particleCount: number;
+  expeditionBurstCount?: number;
+  expeditionBurstReady?: boolean;
   recentDamageEvents: CombatDamageEventSnapshot[];
 }
 
@@ -123,6 +127,8 @@ export class CombatCoordinator {
   private dodgeBurstPending = false;
   private solarShieldCooldownRemaining = 0;
   private readonly solarShieldCooldownTotal = TACTICAL_SHIELD_COOLDOWN_SEC;
+  private expeditionBurstCooldownRemaining = 0;
+  private expeditionBurstCount = 0;
   private extraTargets: readonly CombatTarget[] = [];
   private lastParticleCount = 0;
   private recentDamageEvents: CombatDamageEventSnapshot[] = [];
@@ -177,6 +183,7 @@ export class CombatCoordinator {
           this.dodgeCooldownTotal = 0;
           this.dodgeBurstPending = false;
           this.solarShieldCooldownRemaining = 0;
+          this.expeditionBurstCooldownRemaining = 0;
         }
       });
 
@@ -445,6 +452,99 @@ export class CombatCoordinator {
     return true;
   }
 
+  public getExpeditionBurstState(): {
+    ready: boolean;
+    cooldownRemainingSec: number;
+    cooldownRatio: number;
+    count: number;
+  } {
+    return {
+      ready: this.expeditionBurstCooldownRemaining <= 0,
+      cooldownRemainingSec: this.expeditionBurstCooldownRemaining,
+      cooldownRatio: Math.max(
+        0,
+        Math.min(1, this.expeditionBurstCooldownRemaining / EXPEDITION_BURST_COOLDOWN_SEC)
+      ),
+      count: this.expeditionBurstCount,
+    };
+  }
+
+  /**
+   * 5-Mercenary Expedition Joint Burst Skill: deals synced AOE burst, restores 10% HP & 15% Solar Shield.
+   */
+  public triggerExpeditionBurst(
+    storeState: Pick<GameStoreState, 'sandwalker' | 'mercenaries'>,
+    sink: Pick<CombatStoreSink, 'repairHp' | 'setSolarShield'>,
+    fsmStateId?: GameStateId | null,
+    particlePool?: ParticlePool,
+    cameraSystem?: CameraSystem
+  ): boolean {
+    if (!isExpeditionSynergyActive(storeState.mercenaries)) return false;
+    if (this.expeditionBurstCooldownRemaining > 0) return false;
+    if (storeState.sandwalker.currentHp <= 0) return false;
+    if (
+      fsmStateId &&
+      (fsmStateId === 'OASIS_HUB' ||
+        fsmStateId === 'OASIS_SETTLEMENT' ||
+        fsmStateId === 'EMERGENCY_REVIVE')
+    ) {
+      return false;
+    }
+
+    const avgMercLv =
+      storeState.mercenaries.reduce((sum, m) => sum + m.level, 0) /
+      Math.max(1, storeState.mercenaries.length);
+    const burstDmg = statAt(EXPEDITION_BURST_BASE_DAMAGE, Math.round(avgMercLv)) * 1.25;
+
+    let totalDamage = 0;
+    const targets = this.getAllTargets();
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      if (!t.alive) continue;
+      const res = this.damageSystem.applyDirectDamage(t, burstDmg, {
+        isCrit: true,
+        color: '#fef08a',
+      });
+      totalDamage += res.hpDamage;
+    }
+
+    const maxHp = Math.max(1, storeState.sandwalker.maxHp);
+    const healedHp = Math.round(maxHp * 0.1);
+    const shieldGranted = Math.round(maxHp * 0.15);
+    sink.repairHp(healedHp);
+    sink.setSolarShield(Math.min(maxHp, storeState.sandwalker.solarShieldHp + shieldGranted));
+
+    if (particlePool) {
+      for (let k = 0; k < 16; k++) {
+        const angle = (k / 16) * Math.PI * 2;
+        particlePool.spawn({
+          kind: 'SPARK',
+          x: WALKER_ANCHOR_X + 20,
+          y: WALKER_GROUND_Y - 40,
+          vx: Math.cos(angle) * 120,
+          vy: Math.sin(angle) * 90 - 20,
+          gravity: 60,
+          size: 4.5,
+          endSize: 1.0,
+          maxLife: 0.55,
+          startAlpha: 0.95,
+          color: k % 2 === 0 ? '#fef08a' : '#90cdf4',
+        });
+      }
+    }
+
+    cameraSystem?.shake(7, 0.3);
+    this.expeditionBurstCooldownRemaining = EXPEDITION_BURST_COOLDOWN_SEC;
+    this.expeditionBurstCount += 1;
+
+    this.eventBus?.emit('combat:expeditionBurst', {
+      totalDamage,
+      healedHp,
+      shieldGranted,
+    });
+    return true;
+  }
+
   public getAimReticleOverlay(): AimReticleOverlayState {
     const snap = this.turretSystem.getRenderState();
     const { aimState } = snap;
@@ -530,6 +630,12 @@ export class CombatCoordinator {
     if (this.solarShieldCooldownRemaining > 0) {
       this.solarShieldCooldownRemaining = Math.max(0, this.solarShieldCooldownRemaining - safeDt);
     }
+    if (this.expeditionBurstCooldownRemaining > 0) {
+      this.expeditionBurstCooldownRemaining = Math.max(
+        0,
+        this.expeditionBurstCooldownRemaining - safeDt
+      );
+    }
 
     if (this.dodgeBurstPending) {
       this.dodgeBurstPending = false;
@@ -612,10 +718,35 @@ export class CombatCoordinator {
       { forcePreviewAll }
     );
 
+    if (
+      mercRes.synergyActive &&
+      fsmStateId === 'BOSS_ENCOUNTER' &&
+      this.bossSystem.isActive() &&
+      this.bossSystem.getIsGroggy() &&
+      this.expeditionBurstCooldownRemaining <= 0
+    ) {
+      this.triggerExpeditionBurst(
+        storeState,
+        sink,
+        fsmStateId,
+        options.particlePool,
+        options.cameraSystem
+      );
+    }
+
     if (fsmStateId === 'BOSS_ENCOUNTER' && this.bossSystem.isActive()) {
       const partRewards = this.bossSystem.syncPostCombat();
       if (partRewards.ancientGear > 0 || partRewards.templeKeys > 0) {
         sink.addCurrencies({
+          ancientGear: partRewards.ancientGear,
+          templeKeys: partRewards.templeKeys,
+        });
+        const bossRender = this.bossSystem.getRenderSnapshot();
+        this.eventBus?.emit('boss:partBreak', {
+          bossId: bossRender?.id ?? 'BOSS',
+          act: storeState.meta.currentAct,
+          x: bossRender?.x ?? 550,
+          y: bossRender?.y ?? 295,
           ancientGear: partRewards.ancientGear,
           templeKeys: partRewards.templeKeys,
         });
@@ -850,6 +981,8 @@ export class CombatCoordinator {
       relayTowerVisible: extra.relayTowerVisible ?? false,
       boss: this.bossSystem.getDebugSnapshot(),
       particleCount: extra.particleCount ?? this.lastParticleCount,
+      expeditionBurstCount: this.expeditionBurstCount,
+      expeditionBurstReady: this.expeditionBurstCooldownRemaining <= 0,
       recentDamageEvents: [...this.recentDamageEvents],
     };
   }

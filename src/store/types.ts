@@ -1,3 +1,6 @@
+import type { EquipmentRarity, MercenaryEquipmentSlot } from '../game/data/equipment';
+export type { EquipmentRarity, MercenaryEquipmentSlot };
+
 export type TurretType = 'HEAT_RAY' | 'HARPOON' | 'MORTAR';
 export const TurretType = { HEAT_RAY: 'HEAT_RAY', HARPOON: 'HARPOON', MORTAR: 'MORTAR' } as const;
 
@@ -10,8 +13,12 @@ export const AdTierLevel = { 0: 0, 1: 1, 2: 2, 3: 3 } as const;
 export type TimeOfDay = 'DAY' | 'DUSK' | 'NIGHT' | 'STORM';
 export const TimeOfDay = { DAY: 'DAY', DUSK: 'DUSK', NIGHT: 'NIGHT', STORM: 'STORM' } as const;
 
-export type SkinId = 'DEFAULT' | 'GOLDEN_PHARAOH';
-export const SkinId = { DEFAULT: 'DEFAULT', GOLDEN_PHARAOH: 'GOLDEN_PHARAOH' } as const;
+export type SkinId = 'DEFAULT' | 'GOLDEN_PHARAOH' | 'ROYAL_SILK';
+export const SkinId = {
+  DEFAULT: 'DEFAULT',
+  GOLDEN_PHARAOH: 'GOLDEN_PHARAOH',
+  ROYAL_SILK: 'ROYAL_SILK',
+} as const;
 
 export type EnemyArchetypeTag =
   | 'MIRAGE'
@@ -35,12 +42,14 @@ export type RewardedAdKind =
   | 'ZAFAR_2X'
   | 'SOLAR_RELAY'
   | 'RELIC_APPRAISAL'
-  | 'EMERGENCY_REVIVE';
+  | 'EMERGENCY_REVIVE'
+  | 'MERCHANT_REROLL';
 export const RewardedAdKind = {
   ZAFAR_2X: 'ZAFAR_2X',
   SOLAR_RELAY: 'SOLAR_RELAY',
   RELIC_APPRAISAL: 'RELIC_APPRAISAL',
   EMERGENCY_REVIVE: 'EMERGENCY_REVIVE',
+  MERCHANT_REROLL: 'MERCHANT_REROLL',
 } as const;
 
 export interface TradeCargoItem {
@@ -130,8 +139,89 @@ export interface DailyMissionsState {
   items: DailyMissionProgress[];
 }
 
+export type AutoInvestPolicy = 'MANUAL' | 'BALANCED' | 'COMBAT' | 'ECONOMY';
+
+export type AutoUpgradeCategory =
+  | 'TURRET_LV'
+  | 'TURRET_TIER'
+  | 'LEG'
+  | 'WAGON'
+  | 'MERC'
+  | 'PASSIVE'
+  | 'EQUIP';
+
+export type AutoUpgradeItemKind =
+  | 'TURRET_PART_HEAT'
+  | 'TURRET_PART_HARPOON'
+  | 'TURRET_PART_MORTAR'
+  | 'TURRET_PART_ANY'
+  | 'LEG_PISTON'
+  | 'HYDRAULIC_BLUEPRINT'
+  | 'WAGON_FRAME'
+  | 'MERC_MANUAL'
+  | 'EXPLORER_TABLET'
+  | 'EQUIP_CRATE';
+
+export interface AutoUpgradeEventRecord {
+  id: string;
+  timestamp: number;
+  category: AutoUpgradeCategory;
+  targetLabel: string;
+  fromValue: string;
+  toValue: string;
+  triggerReason: string;
+}
+
+export interface ProgressionCounters {
+  killsByTurret: Record<TurretType, number>;
+  bossPartBreaks: number;
+  bossDefeats: number;
+  stelesDecoded: number;
+  relicsAppraised: number;
+  quicksandCleared: number;
+  sandstormSurvivedSec: number;
+  totalTradeProfit: number;
+  lootCollected: number;
+}
+
+export interface ExplorerPassivesState {
+  appraisalLv: number;
+  survivalLv: number;
+  linguisticsLv: number;
+}
+
+export interface ProgressionState {
+  autoInvestPolicy: AutoInvestPolicy;
+  completedMilestones: string[];
+  counters: ProgressionCounters;
+  recentAutoUpgrades: AutoUpgradeEventRecord[];
+}
+
+export interface UrgentDeliveryState {
+  active: boolean;
+  startedAtPlaySec: number;
+  timeLimitSec: number;
+  completedCount: number;
+}
+
+export interface QuestsState {
+  completedIds: string[];
+  urgentDelivery: UrgentDeliveryState;
+}
+
+export interface EndgameState {
+  templeGateUnlocked: boolean;
+  endingCompleted: boolean;
+  pendingEndingModal: boolean;
+  endlessUnlocked: boolean;
+  endlessActive: boolean;
+  currentDepth: number;
+  maxDepthCleared: number;
+  goldenTradeActive: boolean;
+}
+
 /**
- * Root GameStoreState schema combining PRD §2.2 and Plan §5.1 extension fields.
+ * Root GameStoreState schema combining PRD §2.2, Plan §5.1, and Production Auto-Upgrade fields.
  */
 export interface GameStoreState {
   meta: MetaState;
@@ -143,6 +233,11 @@ export interface GameStoreState {
   relics: RelicsState;
   steles: StelesState;
   dailyMissions?: DailyMissionsState;
+  progression?: ProgressionState;
+  explorerPassives?: ExplorerPassivesState;
+  quests?: QuestsState;
+  mercEquipment?: Partial<Record<string, MercenaryEquipmentSlot>>;
+  endgame?: EndgameState;
 }
 
 /**
@@ -203,6 +298,36 @@ export interface GameStoreActions {
   recordMissionProgress: (id: DailyMissionId, delta?: number) => void;
   claimDailyMission: (id: DailyMissionId) => boolean;
   resetDailyMissionsIfNeeded: (todayStr?: string) => void;
+
+  // Auto-Upgrade & Progression Actions
+  setAutoInvestPolicy: (policy: AutoInvestPolicy) => void;
+  incrementProgressionCounter: (
+    counter: Exclude<keyof ProgressionCounters, 'killsByTurret'>,
+    delta?: number
+  ) => void;
+  incrementTurretKillCounter: (turret: TurretType, delta?: number) => void;
+  markMilestoneCompleted: (milestoneId: string) => boolean;
+  recordAutoUpgradeEvent: (event: AutoUpgradeEventRecord) => void;
+  grantFreeTurretLevel: (turret: TurretType) => boolean;
+  grantFreeTurretTier: (turret: TurretType) => boolean;
+  grantFreeLegLevel: (minTargetLevel?: number) => boolean;
+  grantFreeWagon: () => boolean;
+  grantFreeMercenaryLevel: (mercId?: string) => string | null;
+  grantExplorerPassiveLevel: (passiveKey: keyof ExplorerPassivesState) => boolean;
+
+  // Quest & Equipment Actions (Phase 2 & 3)
+  completeQuest: (questId: string) => boolean;
+  startUrgentDelivery: (timeLimitSec?: number) => boolean;
+  resolveUrgentDelivery: (succeeded: boolean) => void;
+  acquireMercenaryEquipment: (
+    mercId: string,
+    rarity: EquipmentRarity
+  ) => { action: string; fromLabel: string; toLabel: string; slot: MercenaryEquipmentSlot };
+  unlockTempleGate: () => boolean;
+  triggerTempleEnding: () => boolean;
+  dismissEndingModal: (enterEndless?: boolean) => void;
+  toggleEndlessMode: (active: boolean) => boolean;
+  advanceEndlessDepth: () => { clearedDepth: number; nextDepth: number };
 
   // Bulk / Lifecycle Actions
   resetToDefaults: () => void;

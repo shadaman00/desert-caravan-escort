@@ -235,11 +235,11 @@ test.describe('Tier 1: GameStoreState, LocalStorage, Offline Rewards & TimerServ
 
     expect(envelopes.primary).not.toBeNull();
     expect(envelopes.backup).not.toBeNull();
-    expect(envelopes.primary.v).toBe(1);
+    expect(envelopes.primary.v).toBe(2);
     expect(typeof envelopes.primary.savedAt).toBe('number');
     expect(envelopes.primary.state.currencies.sunGold).toBe(1300);
     expect(envelopes.primary.state.currencies.ancientGear).toBe(15);
-    expect(envelopes.backup.v).toBe(1);
+    expect(envelopes.backup.v).toBe(2);
     expect(envelopes.backup.state.currencies.sunGold).toBe(1300);
   });
 
@@ -427,7 +427,7 @@ test.describe('Tier 1: GameStoreState, LocalStorage, Offline Rewards & TimerServ
     expect(hud.actText).toContain('2');
 
     const snap = await readDebugSnapshot(gamePage);
-    expect(snap?.meta.saveVersion).toBe(1);
+    expect(snap?.meta.saveVersion).toBe(2);
     expect(snap?.mercenaries.length).toBe(5);
     expect(snap?.sandwalker.legPartLevel).toBe(6);
     errorTracker.assertNoErrors();

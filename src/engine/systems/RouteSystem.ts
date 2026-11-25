@@ -11,6 +11,7 @@ import {
   type RouteDefinition,
   type RouteHazardKind,
 } from '@/game/data/routes';
+import { getDepthModifiers } from './EndlessExpeditionSystem';
 
 export type HazardKind = RouteHazardKind;
 export type { RouteDefinition };
@@ -70,8 +71,8 @@ export function computeActualSpeed(
   const baseSpeed = DEFAULT_BASE_SPEED;
   const boost =
     options.boostMultiplier !== undefined &&
-    Number.isFinite(options.boostMultiplier) &&
-    options.boostMultiplier >= 0
+      Number.isFinite(options.boostMultiplier) &&
+      options.boostMultiplier >= 0
       ? options.boostMultiplier
       : 1;
   const safeAct = Number.isFinite(storeState.meta.currentAct)
@@ -89,6 +90,13 @@ export function computeActualSpeed(
       return baseSpeed * boost;
 
     case 'HAZARD_ZONE': {
+      if (storeState.endgame?.endlessActive) {
+        const mods = getDepthModifiers(storeState.endgame.currentDepth);
+        if (mods.hasQuicksand) {
+          return quicksandSpeed(baseSpeed, safeLegLevel, 4) * boost;
+        }
+        return baseSpeed * boost;
+      }
       const hazard = resolveHazardKind(fsmStateId, safeAct, safeOasisIndex);
       if (hazard === 'QUICKSAND') {
         return quicksandSpeed(baseSpeed, safeLegLevel, safeAct) * boost;
@@ -153,10 +161,14 @@ export class RouteSystem {
     const actualSpeed = computeActualSpeed(fsmStateId, storeState, options);
     const isMoving = actualSpeed > 0.5;
 
-    const isQuicksand = hazardKind === 'QUICKSAND';
+    const endlessMods =
+      fsmStateId === 'HAZARD_ZONE' && storeState.endgame?.endlessActive
+        ? getDepthModifiers(storeState.endgame.currentDepth)
+        : null;
+    const isQuicksand = endlessMods ? endlessMods.hasQuicksand : hazardKind === 'QUICKSAND';
     const isQuicksandBypassed = isQuicksand && legLevel >= 11;
     const isQuicksandSlowed = isQuicksand && legLevel < 11;
-    const isSandstorm = hazardKind === 'SANDSTORM';
+    const isSandstorm = endlessMods ? endlessMods.hasSandstorm : hazardKind === 'SANDSTORM';
     const isSandstormVisionMasked = isSandstorm && solarShieldHp <= 0;
 
     const distanceTraveledPx = (clampedProgress / 100) * routeDef.routeLengthPx;

@@ -13,7 +13,11 @@ import {
   PIXEL_UPSCALE,
   type CompiledPixelSprite,
 } from '../PixelCanvas';
-import { SANDWALKER_PALETTE_DEFAULT, SANDWALKER_PALETTE_PHARAOH } from '../palettes';
+import {
+  SANDWALKER_PALETTE_DEFAULT,
+  SANDWALKER_PALETTE_PHARAOH,
+  SANDWALKER_PALETTE_ROYAL_SILK,
+} from '../palettes';
 
 /**
  * 38 x 18 pixel-art Sandwalker armored hull (drawn at 2x = 76 x 36 logical px).
@@ -70,6 +74,11 @@ const HULL_SPRITE_PHARAOH: CompiledPixelSprite = compileSprite(
   SANDWALKER_PALETTE_PHARAOH
 );
 
+const HULL_SPRITE_ROYAL_SILK: CompiledPixelSprite = compileSprite(
+  SANDWALKER_PHARAOH_CREST_MATRIX,
+  SANDWALKER_PALETTE_ROYAL_SILK
+);
+
 export function drawPixelSandwalkerHull(
   ctx: CanvasRenderingContext2D,
   rig: SandwalkerRig,
@@ -79,7 +88,12 @@ export function drawPixelSandwalkerHull(
   const groundY = input.groundY ?? 336;
   const hullCenterY = groundY - 70 + rig.hullBobY;
   const isPharaoh = input.equippedSkinId === 'GOLDEN_PHARAOH';
-  const sprite = isPharaoh ? HULL_SPRITE_PHARAOH : HULL_SPRITE_DEFAULT;
+  const isSilk = input.equippedSkinId === 'ROYAL_SILK';
+  const sprite = isPharaoh
+    ? HULL_SPRITE_PHARAOH
+    : isSilk
+      ? HULL_SPRITE_ROYAL_SILK
+      : HULL_SPRITE_DEFAULT;
 
   drawPixelGroundShadow(ctx, anchorX, groundY + 1, 44, 4, 0.30);
 
@@ -91,13 +105,13 @@ export function drawPixelSandwalkerHull(
 
   // Top hull specular rim highlight for dark NIGHT/STORM separation
   const px = PIXEL_UPSCALE;
-  ctx.fillStyle = isPharaoh ? '#fef08a' : '#cbd5e0';
+  ctx.fillStyle = isPharaoh ? '#fef08a' : isSilk ? '#f6e05e' : '#cbd5e0';
   ctx.fillRect(Math.round((anchorX - 18) / px) * px, Math.round((hullCenterY - 16) / px) * px, 34, 2);
 
   // Twin pixel furnace exhaust glow sparks behind hull
   const rx = Math.round((anchorX - 38) / px) * px;
   const ry = Math.round((hullCenterY + 2) / px) * px;
-  ctx.fillStyle = isPharaoh ? '#ecc94b' : '#dd6b20';
+  ctx.fillStyle = isPharaoh ? '#ecc94b' : isSilk ? '#c53030' : '#dd6b20';
   ctx.fillRect(rx - 4, ry, 4, 4);
   ctx.fillStyle = '#fef08a';
   ctx.fillRect(rx - 2, ry - 4, 2, 2);
@@ -145,7 +159,12 @@ export function drawPixelSandwalkerTurret(
   // Pixel pedestal collar seated atop hull
   ctx.fillStyle = '#1a202c';
   ctx.fillRect(-14, -8, 28, 10);
-  ctx.fillStyle = input.equippedSkinId === 'GOLDEN_PHARAOH' ? '#ecc94b' : '#4a5568';
+  ctx.fillStyle =
+    input.equippedSkinId === 'GOLDEN_PHARAOH'
+      ? '#ecc94b'
+      : input.equippedSkinId === 'ROYAL_SILK'
+        ? '#c53030'
+        : '#4a5568';
   ctx.fillRect(-12, -6, 24, 6);
 
   ctx.translate(0, -10);
@@ -215,6 +234,14 @@ function getLegColors(skinId: SkinId, isBack: boolean): {
       tibia: isBack ? '#4a5568' : '#718096',
       armor: '#ecc94b',
       bolt: '#38bdf8',
+    };
+  }
+  if (skinId === 'ROYAL_SILK') {
+    return {
+      femur: isBack ? '#4a2028' : '#742a2a',
+      tibia: isBack ? '#742a2a' : '#9b2c2c',
+      armor: '#f6e05e',
+      bolt: '#81e6d9',
     };
   }
   return {

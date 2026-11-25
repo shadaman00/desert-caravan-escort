@@ -1,22 +1,28 @@
 import { GameFSM, IGameState } from '../GameFSM';
+import type { EventBus } from '@/engine/EventBus';
 import { useGameStore } from '@/store/gameStore';
 import { quicksandSpeed, stormDps } from '@/game/formulas';
 import { getRouteDefinition, resolveActHazardKind } from '@/game/data/routes';
+import { computeRelicCodexBonuses } from '@/game/data/relics';
 import type { HazardSystem } from '@/engine/systems/HazardSystem';
+import { getDepthModifiers } from '@/engine/systems/EndlessExpeditionSystem';
 
 export interface HazardZoneStateOptions {
   getSpeedMultiplier?: () => number;
   hazardSystem?: HazardSystem;
+  eventBus?: EventBus;
 }
 
 export class HazardZoneState implements IGameState {
   public readonly id = 'HAZARD_ZONE' as const;
   private readonly getSpeedMultiplier: () => number;
   private readonly hazardSystem?: HazardSystem;
+  private readonly eventBus?: EventBus;
 
   constructor(options: HazardZoneStateOptions = {}) {
     this.getSpeedMultiplier = options.getSpeedMultiplier ?? (() => 1);
     this.hazardSystem = options.hazardSystem;
+    this.eventBus = options.eventBus;
   }
 
   public enter(fsm: GameFSM): void {
@@ -40,14 +46,21 @@ export class HazardZoneState implements IGameState {
 
     const act = store.meta.currentAct;
     const oasisIndex = store.meta.currentOasisIndex;
+    const endlessMods = store.endgame?.endlessActive
+      ? getDepthModifiers(store.endgame.currentDepth)
+      : null;
     const hazardKind = resolveActHazardKind(act, oasisIndex, this.id);
-    const isSandstorm = hazardKind === 'SANDSTORM';
+    const isSandstorm = endlessMods ? endlessMods.hasSandstorm : hazardKind === 'SANDSTORM';
 
     // Apply Sandstorm DoT if in sandstorm, then immediately check for defeat
     if (isSandstorm) {
-      const dmg = this.hazardSystem
+      const codexBonuses = computeRelicCodexBonuses(store.relics.codex, store.explorerPassives);
+      const resistMult = Math.max(0.3, 1 - codexBonuses.stormResistPct);
+      const rawDmg = this.hazardSystem
         ? this.hazardSystem.computeSandstormDamage(store.sandwalker.maxHp, dt)
         : stormDps(store.sandwalker.maxHp) * dt;
+      const stormMult = endlessMods ? endlessMods.stormDotMultiplier : 1.0;
+      const dmg = rawDmg * resistMult * stormMult;
       const dmgResult = store.applyDamage(dmg);
       if (dmgResult.isDestroyed || useGameStore.getState().sandwalker.currentHp <= 0) {
         fsm.resumeContext = {
@@ -80,6 +93,10 @@ export class HazardZoneState implements IGameState {
     // Escape hazard zone at >= 70%
     if (nextProgress >= 70) {
       latestStore.setHazardConsumed(true);
+      this.eventBus?.emit('hazard:cleared', {
+        hazardKind: isSandstorm ? 'SANDSTORM' : 'QUICKSAND',
+        act,
+      });
       fsm.transitionTo('MARCH_NORMAL');
       return;
     }

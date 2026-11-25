@@ -59,6 +59,13 @@ export const useEquippedSkin = () => useGameStore((s) => s.monetization.equipped
 // Trade
 export const useCargo = () => useGameStore((s) => s.trade.cargo);
 export const useNextOasisPriceRate = () => useGameStore((s) => s.trade.nextOasisPriceRate);
+
+// Auto-Upgrade, Explorer Passives & Quests
+export const useProgression = () => useGameStore((s) => s.progression);
+export const useExplorerPassives = () => useGameStore((s) => s.explorerPassives);
+export const useQuests = () => useGameStore((s) => s.quests);
+export const useMercEquipment = () => useGameStore((s) => s.mercEquipment);
+export const useEndgame = () => useGameStore((s) => s.endgame);
 export const useCargoCapacityInfo = () =>
   useGameStore(
     useShallow((s) => {

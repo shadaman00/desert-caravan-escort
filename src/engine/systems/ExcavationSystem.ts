@@ -1,10 +1,13 @@
 import type { GameStateId } from '@/engine/fsm/GameFSM';
+import type { EventBus } from '@/engine/EventBus';
 import type { GameStoreActions, GameStoreState } from '@/store/types';
 import {
   RELIC_DEFINITIONS,
   STELE_DEFINITIONS,
   DEFAULT_STELE_GEAR_REWARD,
+  computeRelicCodexBonuses,
   getRelicDefinition,
+  pickWeightedRelicId,
 } from '@/game/data/relics';
 import { WALKER_ANCHOR_X, WALKER_GROUND_Y } from '@/engine/render/draw/sandwalker';
 
@@ -33,10 +36,15 @@ export type ExcavationStore = GameStoreState &
   >;
 
 export class ExcavationSystem {
+  private readonly eventBus?: EventBus;
   private nodes: ExcavationNode[] = [];
   private nextNodeId = 1;
   private spawnTimer = 6.0;
   private relicSeq = 0;
+
+  constructor(options: { eventBus?: EventBus } = {}) {
+    this.eventBus = options.eventBus;
+  }
 
   public getActiveNodes(): readonly ExcavationNode[] {
     return this.nodes;
@@ -94,7 +102,8 @@ export class ExcavationSystem {
 
     const isZaraUnlocked =
       store.mercenaries.find((m) => m.id === 'zara')?.isUnlocked ?? false;
-    const rate = isZaraUnlocked ? ZARA_EXCAVATE_SPEED_MULT : 1.0;
+    const codexBonuses = computeRelicCodexBonuses(store.relics.codex, store.explorerPassives);
+    const rate = (isZaraUnlocked ? ZARA_EXCAVATE_SPEED_MULT : 1.0) * (1 + codexBonuses.excavateSpeedPct);
 
     // Periodic spawning during active normal/hazard march
     if (stateId === 'MARCH_NORMAL' || stateId === 'HAZARD_ZONE') {
@@ -114,7 +123,13 @@ export class ExcavationSystem {
             durationSec: BASE_EXCAVATE_SEC,
           });
         } else {
+          const pickedId = pickWeightedRelicId(
+            store.relics.codex,
+            store.explorerPassives?.appraisalLv ?? 1,
+            this.relicSeq
+          );
           const def =
+            RELIC_DEFINITIONS.find((r) => r.id === pickedId) ??
             RELIC_DEFINITIONS[this.relicSeq % RELIC_DEFINITIONS.length];
           this.spawnNode({
             id: `relic_node_${this.nextNodeId++}`,
@@ -165,6 +180,12 @@ export class ExcavationSystem {
       if (!alreadyDecoded) {
         store.addCurrencies({ ancientGear: DEFAULT_STELE_GEAR_REWARD });
       }
+      this.eventBus?.emit('excavation:steleDecoded', {
+        steleId,
+        isNew: !alreadyDecoded,
+        x: node.x,
+        y: node.y,
+      });
     } else {
       const relicId = node.relicId ?? 'relic_solar_disc';
       const def = getRelicDefinition(relicId);
@@ -186,6 +207,7 @@ export class ExcavationSystem {
     const def = getRelicDefinition(ready.id);
     store.resolveRelic(ready.id);
     store.addCurrencies({ ancientGear: def.gearReward });
+    this.eventBus?.emit('excavation:relicAppraised', { relicId: ready.id });
     return ready.id;
   }
 
@@ -202,6 +224,7 @@ export class ExcavationSystem {
     const def = getRelicDefinition(target.id);
     store.resolveRelic(target.id);
     store.addCurrencies({ ancientGear: def.gearReward });
+    this.eventBus?.emit('excavation:relicAppraised', { relicId: target.id });
     return target.id;
   }
 

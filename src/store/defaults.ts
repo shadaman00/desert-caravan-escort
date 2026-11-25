@@ -1,7 +1,69 @@
-import { GameStoreState } from './types';
+import {
+  EndgameState,
+  GameStoreState,
+  ProgressionState,
+  ExplorerPassivesState,
+  QuestsState,
+} from './types';
 import { createInitialDailyMissions } from '../game/data/dailyMissions';
 
-export const CURRENT_SAVE_VERSION = 1;
+export const CURRENT_SAVE_VERSION = 2;
+
+export function createDefaultEndgameState(): EndgameState {
+  return {
+    templeGateUnlocked: false,
+    endingCompleted: false,
+    pendingEndingModal: false,
+    endlessUnlocked: false,
+    endlessActive: false,
+    currentDepth: 1,
+    maxDepthCleared: 0,
+    goldenTradeActive: false,
+  };
+}
+
+export function createInitialQuestsState(): QuestsState {
+  return {
+    completedIds: [],
+    urgentDelivery: {
+      active: false,
+      startedAtPlaySec: 0,
+      timeLimitSec: 120,
+      completedCount: 0,
+    },
+  };
+}
+
+export function createInitialExplorerPassives(): ExplorerPassivesState {
+  return {
+    appraisalLv: 1,
+    survivalLv: 1,
+    linguisticsLv: 1,
+  };
+}
+
+export function createInitialProgressionState(): ProgressionState {
+  return {
+    autoInvestPolicy: 'MANUAL',
+    completedMilestones: [],
+    counters: {
+      killsByTurret: {
+        HEAT_RAY: 0,
+        HARPOON: 0,
+        MORTAR: 0,
+      },
+      bossPartBreaks: 0,
+      bossDefeats: 0,
+      stelesDecoded: 0,
+      relicsAppraised: 0,
+      quicksandCleared: 0,
+      sandstormSurvivedSec: 0,
+      totalTradeProfit: 0,
+      lootCollected: 0,
+    },
+    recentAutoUpgrades: [],
+  };
+}
 
 export const INITIAL_MERCENARIES = [
   {
@@ -109,6 +171,11 @@ export function getDefaultState(): GameStoreState {
       decoded: [],
     },
     dailyMissions: createInitialDailyMissions(getTodayDateString()),
+    progression: createInitialProgressionState(),
+    explorerPassives: createInitialExplorerPassives(),
+    quests: createInitialQuestsState(),
+    mercEquipment: {},
+    endgame: createDefaultEndgameState(),
   };
 }
 

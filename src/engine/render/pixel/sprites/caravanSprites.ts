@@ -13,7 +13,11 @@ import {
   PIXEL_UPSCALE,
   type CompiledPixelSprite,
 } from '../PixelCanvas';
-import { CARAVAN_PALETTE_DEFAULT, CARAVAN_PALETTE_PHARAOH } from '../palettes';
+import {
+  CARAVAN_PALETTE_DEFAULT,
+  CARAVAN_PALETTE_PHARAOH,
+  CARAVAN_PALETTE_ROYAL_SILK,
+} from '../palettes';
 
 // 9 x 8 Camel dot sprite (2x = 18 x 16 logical px)
 const CAMEL_MATRIX_F0: readonly string[] = [
@@ -62,8 +66,14 @@ const CAMEL_PHARAOH_SPRITES = [
   compileSprite(CAMEL_MATRIX_F1, CARAVAN_PALETTE_PHARAOH),
 ] as const;
 
+const CAMEL_ROYAL_SILK_SPRITES = [
+  compileSprite(CAMEL_MATRIX_F0, CARAVAN_PALETTE_ROYAL_SILK),
+  compileSprite(CAMEL_MATRIX_F1, CARAVAN_PALETTE_ROYAL_SILK),
+] as const;
+
 const WAGON_SPRITE_DEFAULT = compileSprite(WAGON_MATRIX, CARAVAN_PALETTE_DEFAULT);
 const WAGON_SPRITE_PHARAOH = compileSprite(WAGON_MATRIX, CARAVAN_PALETTE_PHARAOH);
+const WAGON_SPRITE_ROYAL_SILK = compileSprite(WAGON_MATRIX, CARAVAN_PALETTE_ROYAL_SILK);
 
 function drawPixelWheel(
   ctx: CanvasRenderingContext2D,
@@ -103,9 +113,18 @@ export function drawPixelWagonTrain(
 ): void {
   if (poses.length === 0) return;
   const isRoyal = equippedSkinId === 'GOLDEN_PHARAOH';
+  const isSilk = equippedSkinId === 'ROYAL_SILK';
   const px = PIXEL_UPSCALE;
-  const camelFrames = isRoyal ? CAMEL_PHARAOH_SPRITES : CAMEL_DEFAULT_SPRITES;
-  const wagonSprite = isRoyal ? WAGON_SPRITE_PHARAOH : WAGON_SPRITE_DEFAULT;
+  const camelFrames = isRoyal
+    ? CAMEL_PHARAOH_SPRITES
+    : isSilk
+      ? CAMEL_ROYAL_SILK_SPRITES
+      : CAMEL_DEFAULT_SPRITES;
+  const wagonSprite = isRoyal
+    ? WAGON_SPRITE_PHARAOH
+    : isSilk
+      ? WAGON_SPRITE_ROYAL_SILK
+      : WAGON_SPRITE_DEFAULT;
 
   ctx.save();
   for (let i = poses.length - 1; i >= 0; i--) {
@@ -119,7 +138,7 @@ export function drawPixelWagonTrain(
       pose.tetherEndX,
       pose.tetherEndY,
       px,
-      isRoyal ? '#ecc94b' : '#c69963',
+      isRoyal ? '#ecc94b' : isSilk ? '#f6e05e' : '#c69963',
       1
     );
 
@@ -152,7 +171,7 @@ export function drawPixelWagonTrain(
       pixelSize: px,
     });
 
-    const wheelRim = isRoyal ? '#ecc94b' : '#b7791f';
+    const wheelRim = isRoyal ? '#ecc94b' : isSilk ? '#f6e05e' : '#b7791f';
     const wheelFrame = Math.floor(Math.abs(pose.wheelAngle * 2)) % 2;
     drawPixelWheel(ctx, pose.wagonX - 4, groundY - 4, wheelFrame, wheelRim);
     drawPixelWheel(ctx, pose.wagonX + 4, groundY - 4, wheelFrame, wheelRim);

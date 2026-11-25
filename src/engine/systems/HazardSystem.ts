@@ -6,6 +6,7 @@ import {
   type RouteHazardKind,
 } from '@/game/data/routes';
 import { quicksandIgnore, quicksandSpeed, relayShield, stormDps } from '@/game/formulas';
+import { getDepthModifiers } from './EndlessExpeditionSystem';
 
 export interface SolarRelayActivationResult {
   shieldGranted: number;
@@ -45,17 +46,22 @@ export class HazardSystem {
   public isRelayTowerAvailable(
     fsmStateId: GameStateId | null,
     act: number,
-    oasisIndex: number
+    oasisIndex: number,
+    endlessActive = false,
+    currentDepth = 1
   ): boolean {
     if (fsmStateId !== 'HAZARD_ZONE' || this.relayActivated) {
       return false;
+    }
+    if (endlessActive) {
+      return getDepthModifiers(currentDepth).hasSandstorm;
     }
     return resolveActHazardKind(act, oasisIndex, fsmStateId) === 'SANDSTORM';
   }
 
   public computeActualSpeed(
     fsmStateId: GameStateId | null,
-    storeState: Pick<GameStoreState, 'meta' | 'sandwalker'>,
+    storeState: Pick<GameStoreState, 'meta' | 'sandwalker' | 'endgame'>,
     boostMultiplier = 1,
     openingElapsedSeconds = 0
   ): number {
@@ -76,6 +82,13 @@ export class HazardSystem {
         return BASE_ROUTE_SPEED_PX * boost;
 
       case 'HAZARD_ZONE': {
+        if (storeState.endgame?.endlessActive) {
+          const mods = getDepthModifiers(storeState.endgame.currentDepth);
+          if (mods.hasQuicksand) {
+            return quicksandSpeed(BASE_ROUTE_SPEED_PX, safeLegLevel, 4) * boost;
+          }
+          return BASE_ROUTE_SPEED_PX * boost;
+        }
         const hazard = resolveActHazardKind(safeAct, safeOasisIndex, fsmStateId);
         if (hazard === 'QUICKSAND') {
           return quicksandSpeed(BASE_ROUTE_SPEED_PX, safeLegLevel, safeAct) * boost;
@@ -108,19 +121,22 @@ export class HazardSystem {
 
   public isSandstormVisionMasked(
     fsmStateId: GameStateId | null,
-    storeState: Pick<GameStoreState, 'meta' | 'sandwalker'>
+    storeState: Pick<GameStoreState, 'meta' | 'sandwalker' | 'endgame'>
   ): boolean {
     if (fsmStateId !== 'HAZARD_ZONE') {
       return false;
+    }
+    const shield = Number.isFinite(storeState.sandwalker.solarShieldHp)
+      ? storeState.sandwalker.solarShieldHp
+      : 0;
+    if (storeState.endgame?.endlessActive) {
+      return getDepthModifiers(storeState.endgame.currentDepth).hasSandstorm && shield <= 0;
     }
     const kind = resolveActHazardKind(
       storeState.meta.currentAct,
       storeState.meta.currentOasisIndex,
       fsmStateId
     );
-    const shield = Number.isFinite(storeState.sandwalker.solarShieldHp)
-      ? storeState.sandwalker.solarShieldHp
-      : 0;
     return kind === 'SANDSTORM' && shield <= 0;
   }
 

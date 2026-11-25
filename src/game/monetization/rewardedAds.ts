@@ -5,7 +5,8 @@ export type RewardedTriggerKind =
   | 'RELAY_TOWER'
   | 'SOLAR_RELAY'
   | 'RELIC_APPRAISAL'
-  | 'EMERGENCY_REVIVE';
+  | 'EMERGENCY_REVIVE'
+  | 'MERCHANT_REROLL';
 
 export interface RewardedAdResult {
   granted: boolean;

@@ -961,6 +961,7 @@ html:-webkit-full-screen #root {
 
 /* Phase B: Mute Toggle, Codex Pixel Cards, Receipt, Escape CTA & Desktop Legend */
 .hud-mute-btn,
+.hud-settings-btn,
 .hud-fullscreen-btn {
   height: 20px;
   padding: 0 6px;
@@ -1209,4 +1210,358 @@ html:-webkit-full-screen #root {
   padding: 4px 6px;
   font-family: monospace;
   font-size: 11px;
+}
+
+/* Phase 1 Production: Auto-Upgrade Toast, Policy & Progress UI */
+.auto-upgrade-toast {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  pointer-events: none;
+  background: rgba(15, 18, 26, 0.92);
+  border: 1px solid #ecc94b;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: #fef08a;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+}
+
+.auto-policy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  margin-bottom: 6px;
+  background: rgba(20, 24, 34, 0.9);
+  border: 1px solid rgba(236, 201, 75, 0.3);
+  border-radius: 4px;
+}
+
+.auto-policy-label {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fef08a;
+  gap: 1px;
+}
+
+.auto-policy-select {
+  background: #141720;
+  color: #e2e8f0;
+  border: 1px solid #4a5568;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 11px;
+  max-width: 138px;
+}
+
+.auto-progress-wrap {
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: #90cdf4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.auto-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: #1a202c;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.auto-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #48bb78, #ecc94b);
+  transition: width 0.2s ease;
+}
+
+.auto-upgrade-feed {
+  margin-top: 6px;
+  padding: 5px 6px;
+  background: rgba(20, 24, 34, 0.75);
+  border: 1px solid #2d3748;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.auto-upgrade-feed-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10.5px;
+  color: #e2e8f0;
+}
+
+/* Phase 2 Production: 4-Rarity Relics, Quest Board, Urgent Delivery & Surge Jackpot */
+.codex-passive-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 7px;
+  margin-bottom: 6px;
+  background: rgba(43, 108, 176, 0.22);
+  border: 1px solid rgba(99, 179, 237, 0.45);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #bee3f8;
+}
+
+.rarity-badge {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 3px;
+}
+
+.rarity-COMMON {
+  background: #4a5568;
+  color: #edf2f7;
+}
+
+.rarity-RARE {
+  background: #2b6cb0;
+  color: #bee3f8;
+}
+
+.rarity-LEGENDARY {
+  background: #b7791f;
+  color: #fef08a;
+}
+
+.rarity-ANCIENT {
+  background: #6b46c1;
+  color: #e9d8fd;
+}
+
+.quest-board {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.quest-row {
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #232936;
+  border: 1px solid #2d3748;
+}
+
+.quest-row.done {
+  border-color: #38a169;
+  opacity: 0.72;
+}
+
+.quest-badge-main,
+.quest-badge-sub {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.quest-badge-main {
+  background: #975a16;
+  color: #fefcbf;
+}
+
+.quest-badge-sub {
+  background: #2c5282;
+  color: #bee3f8;
+}
+
+.surge-jackpot-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #9b2c2c;
+  color: #fef08a;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.urgent-delivery-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 7px;
+  margin-bottom: 6px;
+  background: rgba(155, 44, 44, 0.22);
+  border: 1px solid rgba(252, 129, 129, 0.45);
+  border-radius: 4px;
+}
+
+.merc-synergy-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.btn-expedition-burst {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #f6e05e;
+  background: linear-gradient(135deg, #d69e2e, #b7791f);
+  color: #1a202c;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-expedition-burst:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.merc-equip-pill {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(45, 55, 72, 0.85);
+  border: 1px solid rgba(236, 201, 75, 0.35);
+  color: #fef08a;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.wandering-merchant-panel {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: rgba(26, 32, 44, 0.72);
+  border: 1px solid rgba(214, 158, 46, 0.38);
+}
+
+.merchant-offer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.temple-gate-panel,
+.endless-mode-panel {
+  margin-top: 8px;
+  padding: 7px 8px;
+  border-radius: 5px;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(236, 201, 75, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.temple-gate-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(26, 32, 44, 0.88);
+  border: 1px solid #f6e05e;
+  color: #fefcbf;
+  font-size: 11px;
+  font-weight: 700;
+  z-index: 6;
+  white-space: nowrap;
+}
+
+.golden-trade-badge {
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(214, 158, 46, 0.3), rgba(183, 121, 31, 0.25));
+  border: 1px solid rgba(246, 224, 94, 0.65);
+  color: #fef08a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ending-modal-dialog {
+  max-width: 440px;
+}
+
+.ending-epilogue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.65);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.ending-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  font-size: 11.5px;
+  color: #e2e8f0;
+}
+
+.settings-modal-dialog {
+  max-width: 420px;
+}
+
+.settings-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-section-title {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fbd38d;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 2px;
+}
+
+.settings-slider-row,
+.settings-select-row,
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  color: #e2e8f0;
+}
+
+.settings-slider-row input[type='range'] {
+  width: 140px;
+  accent-color: #ecc94b;
+}
+
+.settings-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
 }

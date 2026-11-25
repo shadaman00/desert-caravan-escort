@@ -173,6 +173,8 @@ export function drawWagonTrain(
 ): void {
   if (poses.length === 0) return;
   const isRoyal = equippedSkinId === 'GOLDEN_PHARAOH';
+  const isSilk = equippedSkinId === 'ROYAL_SILK';
+  const accentRim = isRoyal ? '#ecc94b' : isSilk ? '#f6e05e' : '#c69963';
 
   ctx.save();
 
@@ -182,7 +184,7 @@ export function drawWagonTrain(
     // Quadratic harness tether
     const midX = (pose.tetherStartX + pose.tetherEndX) * 0.5;
     const midY = (pose.tetherStartY + pose.tetherEndY) * 0.5 + 2.5;
-    ctx.strokeStyle = isRoyal ? '#ecc94b' : '#c69963';
+    ctx.strokeStyle = accentRim;
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(pose.tetherStartX, pose.tetherStartY);
@@ -198,7 +200,7 @@ export function drawWagonTrain(
     ctx.stroke();
 
     // Camel silhouette
-    drawCamel(ctx, pose, isRoyal);
+    drawCamel(ctx, pose, isRoyal || isSilk);
 
     // Wagon canopy + bed
     const wx = pose.wagonX;
@@ -208,9 +210,9 @@ export function drawWagonTrain(
     canopy.moveTo(wx - 8, wy - 16);
     canopy.quadraticCurveTo(wx, wy - 25.5, wx + 8, wy - 16);
     canopy.closePath();
-    ctx.fillStyle = isRoyal ? '#553c9a' : '#d6b88d';
+    ctx.fillStyle = isRoyal ? '#553c9a' : isSilk ? '#c53030' : '#d6b88d';
     ctx.fill(canopy);
-    ctx.strokeStyle = isRoyal ? '#ecc94b' : '#9c7a4c';
+    ctx.strokeStyle = isRoyal || isSilk ? accentRim : '#9c7a4c';
     ctx.lineWidth = 1;
     ctx.stroke(canopy);
 
@@ -224,13 +226,13 @@ export function drawWagonTrain(
 
     // Wagon bed
     ctx.fillStyle = isRoyal ? '#744210' : '#4a321f';
-    ctx.strokeStyle = isRoyal ? '#ecc94b' : '#c87d32';
+    ctx.strokeStyle = isRoyal || isSilk ? accentRim : '#c87d32';
     ctx.lineWidth = 1.2;
     ctx.fillRect(wx - 8.5, wy - 17, 17, 11);
     ctx.strokeRect(wx - 8.5, wy - 17, 17, 11);
 
     // Rotating spoked wheels
-    const wheelRim = isRoyal ? '#ecc94b' : '#b7791f';
+    const wheelRim = isRoyal ? '#ecc94b' : isSilk ? '#f6e05e' : '#b7791f';
     drawSpokedWheel(
       ctx,
       wx - 5,

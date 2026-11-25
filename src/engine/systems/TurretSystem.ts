@@ -12,6 +12,7 @@ import {
   WEAK_POINT_SNAP_RADIUS_PX,
 } from '@/game/data/turrets';
 import { isExpeditionSynergyActive } from '@/game/formulas';
+import { computeRelicCodexBonuses } from '@/game/data/relics';
 import {
   WALKER_ANCHOR_X,
   WALKER_GROUND_Y,
@@ -43,6 +44,7 @@ export interface HarpoonProjectile {
   level: number;
   synergyActive: boolean;
   isWeakPointHit: boolean;
+  damageBonusMult?: number;
   state: 'FLYING' | 'RETRACTING';
   retractTimer: number;
   retractStartX: number;
@@ -67,6 +69,7 @@ export interface MortarShell {
   level: number;
   synergyActive: boolean;
   isWeakPointHit: boolean;
+  damageBonusMult?: number;
 }
 
 export interface MortarExplosionEffect {
@@ -596,6 +599,11 @@ export class TurretSystem {
   ): void {
     const config = TURRET_CONFIGS[turret];
     this.recoilPx = config.recoilKickPx;
+    const codexBonuses = computeRelicCodexBonuses(
+      ctx.storeState.relics.codex,
+      ctx.storeState.explorerPassives
+    );
+    const damageBonusMult = 1 + codexBonuses.turretDamagePct;
 
     const aimPos = isManualLocked
       ? getTargetWeakPointPos(target)
@@ -640,7 +648,7 @@ export class TurretSystem {
           this.damageSystem.applyTurretHit(t, {
             turret: 'HEAT_RAY',
             level,
-            baseDamage: config.baseDamagePerHit,
+            baseDamage: config.baseDamagePerHit * damageBonusMult,
             synergyActive,
             isWeakPointHit: tWeak,
             armorCrushFactor: config.armorCrushFactor,
@@ -681,6 +689,7 @@ export class TurretSystem {
         level,
         synergyActive,
         isWeakPointHit,
+        damageBonusMult,
         state: 'FLYING',
         retractTimer: 0,
         retractStartX: muzzleX,
@@ -717,6 +726,7 @@ export class TurretSystem {
       level,
       synergyActive,
       isWeakPointHit,
+      damageBonusMult,
     });
   }
 
@@ -775,7 +785,7 @@ export class TurretSystem {
         this.damageSystem.applyTurretHit(hitTarget, {
           turret: 'HARPOON',
           level: h.level,
-          baseDamage: config.baseDamagePerHit,
+          baseDamage: config.baseDamagePerHit * (h.damageBonusMult ?? 1),
           synergyActive: h.synergyActive,
           isWeakPointHit: h.isWeakPointHit && hitTarget.id === h.targetId,
           armorCrushFactor: config.armorCrushFactor,
@@ -847,7 +857,7 @@ export class TurretSystem {
           this.damageSystem.applyTurretHit(t, {
             turret: 'MORTAR',
             level: m.level,
-            baseDamage: config.baseDamagePerHit,
+            baseDamage: config.baseDamagePerHit * (m.damageBonusMult ?? 1),
             synergyActive: m.synergyActive,
             isWeakPointHit: m.isWeakPointHit && t.id === m.targetId,
             armorCrushFactor: config.armorCrushFactor,

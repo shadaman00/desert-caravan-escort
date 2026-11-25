@@ -26,6 +26,18 @@ export const SANDWALKER_PALETTE_PHARAOH: Readonly<Record<string, string>> = {
   R: '#553c9a', // pharaoh purple crest
 };
 
+export const SANDWALKER_PALETTE_ROYAL_SILK: Readonly<Record<string, string>> = {
+  K: '#1c1018', // deep obsidian outline
+  D: '#742a2a', // crimson hull shadow
+  M: '#9b2c2c', // imperial crimson armor
+  L: '#c53030', // bright crimson silk plating
+  S: '#fef08a', // gold leaf specular rivet
+  G: '#f6e05e', // imperial gold silk trim
+  O: '#2c7a7b', // royal jade emblem
+  C: '#81e6d9', // jade crystal viewport
+  R: '#d69e2e', // gold silk crest
+};
+
 export const CARAVAN_PALETTE_DEFAULT: Readonly<Record<string, string>> = {
   K: '#2b1b10', // outline brown
   B: '#4a321f', // dark wagon wood bed (wagonDarkBed)
@@ -50,6 +62,19 @@ export const CARAVAN_PALETTE_PHARAOH: Readonly<Record<string, string>> = {
   S: '#c9b08a', // camel shadow
   P: '#2b6cb0', // lapis cargo pack
   G: '#fef08a', // bright gold jewel
+};
+
+export const CARAVAN_PALETTE_ROYAL_SILK: Readonly<Record<string, string>> = {
+  K: '#2a1118', // dark wine outline
+  B: '#4a321f', // dark wood wagon bed
+  W: '#7c4b28', // frame wood
+  C: '#c53030', // crimson royal silk canopy
+  T: '#f6e05e', // imperial gold trim
+  M: '#f6e05e', // gold spoked wheel
+  H: '#f7ead9', // cream ceremonial camel
+  S: '#d6bfa3', // camel shadow
+  P: '#2c7a7b', // jade silk cargo pack
+  G: '#fef08a', // gold ornament
 };
 
 export const ENEMY_PALETTE: Readonly<Record<string, string>> = {

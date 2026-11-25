@@ -170,6 +170,24 @@ export const SELECTORS = {
   wagonUpgradeCost: '[data-testid="wagon-upgrade-cost"], .wagon-upgrade-cost',
   btnAddWagon: '[data-testid="btn-add-wagon"], button:has-text("마차 증설")',
   btnEquipPharaohSkin: '[data-testid="btn-equip-skin-pharaoh"], button:has-text("황금 파라오")',
+  btnEquipRoyalSilkSkin: '[data-testid="btn-equip-skin-royal-silk"], button:has-text("왕실 비단")',
+  hudSettingsBtn: '[data-testid="hud-settings-btn"]',
+  settingsModal: '[data-testid="settings-modal"]',
+  sliderMasterVolume: '[data-testid="slider-master-volume"]',
+  sliderBgmVolume: '[data-testid="slider-bgm-volume"]',
+  sliderSfxVolume: '[data-testid="slider-sfx-volume"]',
+  toggleSettingsMute: '[data-testid="toggle-settings-mute"]',
+  toggleSettingsHaptics: '[data-testid="toggle-settings-haptics"]',
+  selectToastDensity: '[data-testid="select-toast-density"]',
+  settingsAutoInvestSelect: '[data-testid="settings-auto-invest-select"]',
+  btnCloseSettings: '[data-testid="btn-close-settings"]',
+  autoInvestPolicySelect: '[data-testid="auto-invest-policy-select"]',
+  autoUpgradeToast: '[data-testid="auto-upgrade-toast"]',
+  autoUpgradeFeed: '[data-testid="auto-upgrade-feed"]',
+  turretAutoProgress: '[data-testid="turret-auto-progress"]',
+  legAutoProgress: '[data-testid="leg-auto-progress"]',
+  wagonAutoProgress: '[data-testid="wagon-auto-progress"]',
+  explorerPassivesSummary: '[data-testid="explorer-passives-summary"]',
 
   // Mercenaries Tab
   mercSynergyBanner:
@@ -181,10 +199,16 @@ export const SELECTORS = {
   mercUpgradeBtnSelector,
   mercCard,
   btnUpgradeMerc,
+  mercEquipBadge: (mercId: string) => `[data-testid="merc-equip-${mercId}"]`,
+  btnExpeditionBurst: '[data-testid="btn-expedition-burst"]',
 
   // Codex & Appraisal Tab
   codexRelicList: '[data-testid="codex-relic-list"], .codex-relic-list',
   codexSteleList: '[data-testid="codex-stele-list"], .codex-stele-list',
+  codexPassiveBanner: '[data-testid="codex-passive-banner"]',
+  questBoard: '[data-testid="quest-board"]',
+  surgeJackpotPill: '[data-testid="surge-jackpot-pill"]',
+  btnStartUrgentDelivery: '[data-testid="btn-start-urgent-delivery"]',
   btnAppraiseRelic: '[data-testid="btn-appraise-relic"], button:has-text("감정 시작"), button:text-is("감정")',
   btnAppraiseRelicAd: '[data-testid="btn-appraise-relic-ad"], button:has-text("즉시 감정")',
 
@@ -195,6 +219,19 @@ export const SELECTORS = {
   btnBuyCargo: '[data-testid="btn-buy-cargo"], button:has-text("매입")',
   btnBuyCargoMax: '[data-testid="btn-buy-cargo-max"], button:has-text("최대 적재")',
   tradeCapacityText: '[data-testid="trade-capacity-text"], .trade-capacity-text',
+  wanderingMerchantPanel: '[data-testid="wandering-merchant-panel"]',
+  btnMerchantReroll: '[data-testid="btn-merchant-reroll"]',
+  merchantOffer: (idx: number) => `[data-testid="merchant-offer-${idx}"]`,
+  btnBuyMerchant: (idx: number) => `[data-testid="btn-buy-merchant-${idx}"]`,
+  templeGatePanel: '[data-testid="temple-gate-panel"]',
+  templeGateGuide: '[data-testid="temple-gate-guide"]',
+  btnUnlockTempleGate: '[data-testid="btn-unlock-temple-gate"]',
+  endingSequenceModal: '[data-testid="ending-sequence-modal"]',
+  btnEnterEndless: '[data-testid="btn-enter-endless"]',
+  btnCloseEnding: '[data-testid="btn-close-ending"]',
+  endlessModePanel: '[data-testid="endless-mode-panel"]',
+  btnToggleEndless: '[data-testid="btn-toggle-endless"]',
+  goldenTradeBadge: '[data-testid="golden-trade-badge"]',
 
   // Modals & Flows
   settlementModal: '[data-testid="settlement-modal"], .modal-settlement',
@@ -524,6 +561,8 @@ export interface CombatDebugSnapshot {
   relayTowerVisible?: boolean;
   boss?: CombatBossDebugSnapshot | null;
   particleCount?: number;
+  expeditionBurstCount?: number;
+  expeditionBurstReady?: boolean;
   recentDamageEvents?: CombatDamageEventSnapshot[];
 }
 
@@ -550,6 +589,64 @@ export interface SandwalkerDebugSnapshot {
   relics?: GameStoreState['relics'];
   steles?: GameStoreState['steles'];
   monetization?: GameStoreState['monetization'];
+  progression?: {
+    autoInvestPolicy: 'MANUAL' | 'BALANCED' | 'COMBAT' | 'ECONOMY';
+    completedMilestones: string[];
+    counters: {
+      killsByTurret: Record<TurretType, number>;
+      bossPartBreaks: number;
+      bossDefeats: number;
+      stelesDecoded: number;
+      relicsAppraised: number;
+      quicksandCleared: number;
+      sandstormSurvivedSec: number;
+      totalTradeProfit: number;
+      lootCollected: number;
+    };
+    recentAutoUpgrades: Array<{
+      id: string;
+      category: string;
+      targetLabel: string;
+      fromValue: string;
+      toValue: string;
+      triggerReason: string;
+    }>;
+  };
+  explorerPassives?: {
+    appraisalLv: number;
+    survivalLv: number;
+    linguisticsLv: number;
+  };
+  quests?: {
+    completedIds: string[];
+    urgentDelivery: {
+      active: boolean;
+      startedAtPlaySec: number;
+      timeLimitSec: number;
+      completedCount: number;
+    };
+  };
+  mercEquipment?: Partial<
+    Record<string, { rarity: 'COMMON' | 'RARE' | 'LEGENDARY' | 'ANCIENT'; level: number; xp: number }>
+  >;
+  endgame?: {
+    templeGateUnlocked: boolean;
+    endingCompleted: boolean;
+    pendingEndingModal: boolean;
+    endlessUnlocked: boolean;
+    endlessActive: boolean;
+    currentDepth: number;
+    maxDepthCleared: number;
+    goldenTradeActive: boolean;
+  };
+  codexBonuses?: {
+    turretDamagePct: number;
+    critChancePct: number;
+    tradeGoldPct: number;
+    stormResistPct: number;
+    excavateSpeedPct: number;
+  };
+  lootCount?: number;
   dialogue?: DialogueDebugSnapshot;
 }
 
@@ -724,6 +821,27 @@ export async function readDebugSnapshot(page: Page): Promise<SandwalkerDebugSnap
     ).__SANDWALKER_DEBUG__;
     return bridge?.getSnapshot?.() ?? null;
   });
+}
+
+export async function spawnDebugLoot(
+  page: Page,
+  itemKind:
+    | 'TURRET_PART_HEAT'
+    | 'TURRET_PART_HARPOON'
+    | 'TURRET_PART_MORTAR'
+    | 'HYDRAULIC_BLUEPRINT'
+    | 'WAGON_FRAME'
+    | 'MERC_MANUAL'
+    | 'EXPLORER_TABLET'
+): Promise<void> {
+  await page.evaluate((kind) => {
+    const bridge = (
+      window as unknown as {
+        __SANDWALKER_DEBUG__?: { spawnLoot?: (k: string) => void };
+      }
+    ).__SANDWALKER_DEBUG__;
+    bridge?.spawnLoot?.(kind);
+  }, itemKind);
 }
 
 /**

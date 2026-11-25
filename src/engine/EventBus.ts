@@ -1,5 +1,11 @@
 import type { GameStateId } from './fsm/GameFSM';
-import type { EnemyArchetypeTag, MercenaryRole, TurretType } from '@/store/types';
+import type {
+  AutoUpgradeEventRecord,
+  AutoUpgradeItemKind,
+  EnemyArchetypeTag,
+  MercenaryRole,
+  TurretType,
+} from '@/store/types';
 
 export interface EngineEventMap {
   'state:change': {
@@ -62,6 +68,66 @@ export interface EngineEventMap {
   'camera:shake': {
     intensity: number;
     duration: number;
+  };
+  'boss:partBreak': {
+    bossId: string;
+    act: number;
+    x: number;
+    y: number;
+    ancientGear: number;
+    templeKeys: number;
+  };
+  'boss:defeated': {
+    bossId: string;
+    act: number;
+    x: number;
+    y: number;
+  };
+  'excavation:steleDecoded': {
+    steleId: number;
+    isNew: boolean;
+    x: number;
+    y: number;
+  };
+  'excavation:relicAppraised': {
+    relicId: string;
+  };
+  'trade:settled': {
+    profit: number;
+    oasisIndex: number;
+  };
+  'hazard:cleared': {
+    hazardKind: 'QUICKSAND' | 'SANDSTORM';
+    act: number;
+  };
+  'loot:collected': {
+    itemKind: AutoUpgradeItemKind;
+    label: string;
+    x: number;
+    y: number;
+  };
+  'progression:autoUpgrade': AutoUpgradeEventRecord;
+  'quest:completed': {
+    questId: string;
+    title: string;
+    kind: 'MAIN' | 'SUB' | 'URGENT';
+  };
+  'combat:expeditionBurst': {
+    totalDamage: number;
+    healedHp: number;
+    shieldGranted: number;
+  };
+  'endgame:templeUnlocked': {
+    mapFragments: number;
+    templeKeys: number;
+  };
+  'endgame:endingTriggered': {
+    commemorativeRelicId: string;
+  };
+  'endgame:depthCleared': {
+    clearedDepth: number;
+    nextDepth: number;
+    bonusGold: number;
   };
 }
 

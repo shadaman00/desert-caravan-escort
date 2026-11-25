@@ -58,7 +58,7 @@ export interface GameStoreState {
   monetization: {
     adTier: AdTierLevel;
     dailySkipTicketsLeft: number;
-    equippedSkinId: 'DEFAULT' | 'GOLDEN_PHARAOH';
+    equippedSkinId: 'DEFAULT' | 'GOLDEN_PHARAOH' | 'ROYAL_SILK';
     skipTicketsResetDate: string;
   };
   trade: {
@@ -71,6 +71,16 @@ export interface GameStoreState {
   };
   steles: {
     decoded: number[];
+  };
+  endgame?: {
+    templeGateUnlocked: boolean;
+    endingCompleted: boolean;
+    pendingEndingModal: boolean;
+    endlessUnlocked: boolean;
+    endlessActive: boolean;
+    currentDepth: number;
+    maxDepthCleared: number;
+    goldenTradeActive: boolean;
   };
 }
 

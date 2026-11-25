@@ -1,9 +1,13 @@
 import { GameFSM, IGameState } from '../GameFSM';
+import type { EventBus } from '@/engine/EventBus';
 import { useGameStore } from '@/store/gameStore';
 import { MercenaryState } from '@/store/types';
 import { shouldShowInterstitialAd } from '@/game/monetization/adPolicy';
 import { adSimulator } from '@/game/monetization/AdSimulator';
 import { rollNextOasisPriceRate } from '@/game/data/oases';
+import { rollGoldenTradePriceRate } from '@/engine/systems/EndlessExpeditionSystem';
+import { computeRelicCodexBonuses } from '@/game/data/relics';
+import { computeMercEquipmentMultipliers } from '@/game/data/equipment';
 
 export interface SettlementPayload {
   isChapterBossClear?: boolean;
@@ -35,11 +39,16 @@ const EMPTY_BREAKDOWN: SettlementBreakdown = {
 
 export class OasisSettlementState implements IGameState {
   public readonly id = 'OASIS_SETTLEMENT' as const;
+  private readonly eventBus?: EventBus;
   public isChapterBossClear = false;
   public totalProfit = 0;
   public breakdown: SettlementBreakdown = { ...EMPTY_BREAKDOWN };
   public zafarClaimed = false;
   private isDismissing = false;
+
+  constructor(options: { eventBus?: EventBus } = {}) {
+    this.eventBus = options.eventBus;
+  }
 
   public enter(_fsm: GameFSM, payload?: unknown): void {
     this.isDismissing = false;
@@ -65,11 +74,20 @@ export class OasisSettlementState implements IGameState {
       0
     );
     const priceRate = store.trade.nextOasisPriceRate;
+    const codexBonuses = computeRelicCodexBonuses(store.relics.codex, store.explorerPassives);
+    const harunEqBonus = harun
+      ? computeMercEquipmentMultipliers('harun', store.mercEquipment?.harun).tradeBonusPct
+      : 0;
+    const totalTradeBonus = codexBonuses.tradeGoldPct + harunEqBonus;
+    const effectiveRate =
+      totalTradeBonus > 0
+        ? Math.round(priceRate * (1 + totalTradeBonus) * 1000) / 1000
+        : priceRate;
     const harunMultiplier = harun ? 1.25 : 1.0;
     const synergyMultiplier = synergy ? 1.2 : 1.0;
 
     // Sells trade cargo
-    this.totalProfit = store.sellCargo(priceRate, harun, synergy);
+    this.totalProfit = store.sellCargo(effectiveRate, harun, synergy);
     this.breakdown = {
       cargoUnits,
       purchaseCost: Math.round(purchaseCost),
@@ -89,6 +107,13 @@ export class OasisSettlementState implements IGameState {
     // Decision D9: arriving at Oasis 2+ in Act 1 unlocks Zara
     if (nextOasisIndex >= 2) {
       store.unlockMercenary('zara');
+    }
+
+    if (this.totalProfit > 0) {
+      this.eventBus?.emit('trade:settled', {
+        profit: this.totalProfit,
+        oasisIndex: nextOasisIndex,
+      });
     }
   }
 
@@ -117,7 +142,11 @@ export class OasisSettlementState implements IGameState {
 
     const finalizeDismiss = () => {
       const latest = useGameStore.getState();
-      latest.setNextOasisPriceRate(rollNextOasisPriceRate());
+      const useGoldenTrade =
+        Boolean(latest.endgame?.goldenTradeActive) || Boolean(latest.endgame?.endingCompleted);
+      latest.setNextOasisPriceRate(
+        useGoldenTrade ? rollGoldenTradePriceRate() : rollNextOasisPriceRate()
+      );
       if (
         latest.meta.currentOasisIndex >= latest.meta.currentAct * 3 &&
         latest.meta.currentAct < 4
