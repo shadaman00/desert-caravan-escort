@@ -7,6 +7,12 @@ import {
   type ReactElement,
 } from 'react';
 import { clientToZoneB, useViewportScale } from './scale';
+import {
+  isFullscreenActive,
+  isFullscreenSupported,
+  subscribeFullscreenChange,
+  toggleFullscreen,
+} from './fullscreen';
 import { useGameStore } from '../store/gameStore';
 import {
   useActiveTurret,
@@ -262,6 +268,8 @@ export default function App(): ReactElement {
   const [zafar2xClaimed, setZafar2xClaimed] = useState<boolean>(false);
   const [relicAdPending, setRelicAdPending] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(() => soundEngine.isMuted());
+  const [fullscreenSupported] = useState<boolean>(() => isFullscreenSupported());
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isFullscreenActive());
   const [codexNowMs, setCodexNowMs] = useState<number>(() => Date.now());
   const [saveJsonInput, setSaveJsonInput] = useState<string>('');
   const [saveBackupStatus, setSaveBackupStatus] = useState<string | null>(null);
@@ -815,9 +823,17 @@ export default function App(): ReactElement {
     return () => window.clearInterval(id);
   }, [pendingRelics.length]);
 
+  useEffect(() => subscribeFullscreenChange(setIsFullscreen), []);
+
   const handleToggleMute = () => {
     const next = soundEngine.toggleMute();
     setIsMuted(next);
+  };
+
+  const handleToggleFullscreen = () => {
+    void toggleFullscreen().then((active) => {
+      setIsFullscreen(active);
+    });
   };
 
   const handleTurretSwitch = (turret: TurretType) => {
@@ -994,6 +1010,13 @@ export default function App(): ReactElement {
           const idx = GROWTH_TABS.indexOf(prev);
           return GROWTH_TABS[(idx + 1) % GROWTH_TABS.length];
         });
+      } else if (e.key === 'f' || e.key === 'F') {
+        if (isFullscreenSupported()) {
+          e.preventDefault();
+          void toggleFullscreen().then((active) => {
+            setIsFullscreen(active);
+          });
+        }
       }
     };
 
@@ -1232,7 +1255,7 @@ export default function App(): ReactElement {
         📱 가로 화면으로 회전하면 더 넓게 즐길 수 있습니다
       </div>
       <div className="desktop-shortcut-legend" data-testid="desktop-shortcut-legend">
-        [1/2/3] 포탑 · [Space] 회피 · [E] 보호막 · [Q/R] 탭 · 드래그 약점 조준
+        [1/2/3] 포탑 · [Space] 회피 · [E] 보호막 · [Q/R] 탭 · [F] 전체화면 · 드래그 약점 조준
       </div>
 
       <div
@@ -1330,6 +1353,19 @@ export default function App(): ReactElement {
               >
                 {isMuted ? '🔇' : '🔊'}
               </button>
+              {fullscreenSupported && (
+                <button
+                  type="button"
+                  className={`hud-fullscreen-btn${isFullscreen ? ' active' : ''}`}
+                  data-testid="hud-fullscreen-btn"
+                  data-fullscreen={isFullscreen ? 'true' : 'false'}
+                  aria-label={isFullscreen ? '전체화면 종료' : '전체화면'}
+                  title={isFullscreen ? '전체화면 종료 (F / Esc)' : '전체화면 (F)'}
+                  onClick={handleToggleFullscreen}
+                >
+                  {isFullscreen ? '❐' : '⛶'}
+                </button>
+              )}
             </div>
           </div>
         </section>

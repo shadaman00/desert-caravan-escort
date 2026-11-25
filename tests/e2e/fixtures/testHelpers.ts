@@ -115,6 +115,7 @@ export const SELECTORS = {
   hudSolarShield: '[data-testid="hud-solar-shield"], .hud-solar-shield',
   hudActualSpeed: '[data-testid="hud-actual-speed"], .hud-actual-speed',
   hudSynergyBadge: '[data-testid="hud-synergy-badge"], .hud-synergy-badge',
+  hudFullscreenBtn: '[data-testid="hud-fullscreen-btn"], .hud-fullscreen-btn',
 
   // Zone B: Battlefield Overlays & Boss HUD
   dialogueBubble: '[data-testid="dialogue-bubble"], .dialogue-bubble',

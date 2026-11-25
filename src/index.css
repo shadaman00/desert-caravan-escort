@@ -9,7 +9,13 @@
 
 html,
 body,
-#root {
+#root,
+html:fullscreen,
+html:fullscreen body,
+html:fullscreen #root,
+html:-webkit-full-screen,
+html:-webkit-full-screen body,
+html:-webkit-full-screen #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -954,7 +960,8 @@ body,
 }
 
 /* Phase B: Mute Toggle, Codex Pixel Cards, Receipt, Escape CTA & Desktop Legend */
-.hud-mute-btn {
+.hud-mute-btn,
+.hud-fullscreen-btn {
   height: 20px;
   padding: 0 6px;
   border: 1px solid #ecc94b;
@@ -965,6 +972,15 @@ body,
   font-weight: 700;
   cursor: pointer;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-fullscreen-btn.active {
+  border-color: #63b3ed;
+  color: #bee3f8;
+  background: rgba(43, 108, 176, 0.35);
 }
 
 .tab-btn {

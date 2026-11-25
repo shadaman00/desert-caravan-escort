@@ -814,4 +814,54 @@ test.describe('Tier 1: Viewport, Zone B Canvas & UI Dashboard Coverage (F1, F15,
     await gamePage.keyboard.press('q');
     await expect(gamePage.locator(SELECTORS.tabBtnMercenaries).first()).toHaveClass(/active/);
   });
+
+  test('TC-VPORT-23: Fullscreen HUD button fits inside Zone A, toggles via click & F key, and ignores input focus', async ({
+    gamePage,
+    errorTracker,
+  }) => {
+    await injectGameState(gamePage, createAct1HubSeed());
+    await gamePage.goto('/');
+    await waitForCanvasReady(gamePage, 10000);
+
+    const fsBtn = gamePage.locator(SELECTORS.hudFullscreenBtn).first();
+    await expect(fsBtn).toBeVisible();
+    await expect(fsBtn).toHaveAttribute('data-fullscreen', 'false');
+
+    // Verify button sits strictly inside Zone A (960x56) without overflow
+    const shellBox = await gamePage.locator(SELECTORS.viewportShell).first().boundingBox();
+    const btnBox = await fsBtn.boundingBox();
+    expect(shellBox).not.toBeNull();
+    expect(btnBox).not.toBeNull();
+    if (shellBox && btnBox) {
+      const scale = shellBox.width / 960;
+      const logicalLeft = (btnBox.x - shellBox.x) / scale;
+      const logicalRight = (btnBox.x + btnBox.width - shellBox.x) / scale;
+      const logicalTop = (btnBox.y - shellBox.y) / scale;
+      const logicalBottom = (btnBox.y + btnBox.height - shellBox.y) / scale;
+      expect(logicalLeft).toBeGreaterThanOrEqual(-1);
+      expect(logicalRight).toBeLessThanOrEqual(961);
+      expect(logicalTop).toBeGreaterThanOrEqual(-1);
+      expect(logicalBottom).toBeLessThanOrEqual(57);
+    }
+
+    // Click button to enter fullscreen & verify attribute + active class
+    await fsBtn.click();
+    await expect(fsBtn).toHaveAttribute('data-fullscreen', 'true');
+    await expect(fsBtn).toHaveClass(/active/);
+    await expect(fsBtn).toHaveAttribute('aria-label', '전체화면 종료');
+
+    // Focusing an input field prevents 'f' shortcut from exiting fullscreen
+    await gamePage.locator(SELECTORS.tabBtnTrading).first().click();
+    await gamePage.locator(SELECTORS.tradeCargoQtyInput).first().focus();
+    await gamePage.keyboard.press('f');
+    await expect(fsBtn).toHaveAttribute('data-fullscreen', 'true');
+
+    // Blurring input and pressing 'f' toggles fullscreen back off
+    await gamePage.locator(SELECTORS.tradeCargoQtyInput).first().blur();
+    await gamePage.keyboard.press('f');
+    await expect(fsBtn).toHaveAttribute('data-fullscreen', 'false');
+    await expect(fsBtn).toHaveAttribute('aria-label', '전체화면');
+
+    errorTracker.assertNoErrors();
+  });
 });
