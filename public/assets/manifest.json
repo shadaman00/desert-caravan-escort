@@ -1,0 +1,27 @@
+{
+  "available": [
+    "assets/characters/kasim.png",
+    "assets/characters/harun.png",
+    "assets/characters/tarek.png",
+    "assets/characters/sera.png",
+    "assets/characters/zara.png",
+    "assets/characters/lili.png",
+    "assets/characters/jafar.png",
+    "assets/mech/sandwalker_body.png",
+    "assets/mech/turret_harpoon.png",
+    "assets/mech/turret_laser.png",
+    "assets/mech/turret_mortar.png",
+    "assets/mech/camel_wagon.png",
+    "assets/enemies/sand_raider.png",
+    "assets/enemies/scorpion_rex.png",
+    "assets/enemies/mirage_king.png",
+    "assets/enemies/apophis_sandworm.png",
+    "assets/biomes/zone1_dunes.png",
+    "assets/biomes/zone2_canyon.png",
+    "assets/biomes/zone3_storm.png",
+    "assets/biomes/zone4_temple.png",
+    "assets/storyboard/cut1_legend.png",
+    "assets/storyboard/cut2_ambush.png",
+    "assets/storyboard/cut3_departure.png"
+  ]
+}
