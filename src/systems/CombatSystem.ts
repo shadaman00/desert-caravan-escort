@@ -97,6 +97,12 @@ export interface ShotDamageParams {
 
 export interface CombatTickOutput {
   fired: boolean;
+  firedTurretId: TurretId | null;
+  mortarExploded: boolean;
+  enemyHitCrit: boolean;
+  sandwormEnteredWarn: boolean;
+  sandwormEnteredEmerge: boolean;
+  hasActiveBoss: boolean;
   goldEarned: number;
   gearsEarned: number;
   shakePx: number;
@@ -195,6 +201,12 @@ export class CombatSystem {
 
   private readonly tickResult: CombatTickOutput = {
     fired: false,
+    firedTurretId: null,
+    mortarExploded: false,
+    enemyHitCrit: false,
+    sandwormEnteredWarn: false,
+    sandwormEnteredEmerge: false,
+    hasActiveBoss: false,
     goldEarned: 0,
     gearsEarned: 0,
     shakePx: 0,
@@ -492,6 +504,12 @@ export class CombatSystem {
   ): CombatTickOutput {
     const out = this.tickResult;
     out.fired = false;
+    out.firedTurretId = null;
+    out.mortarExploded = false;
+    out.enemyHitCrit = false;
+    out.sandwormEnteredWarn = false;
+    out.sandwormEnteredEmerge = false;
+    out.hasActiveBoss = false;
     out.goldEarned = 0;
     out.gearsEarned = 0;
     out.shakePx = 0;
@@ -540,6 +558,7 @@ export class CombatSystem {
           if (e.sandwormTimer <= 0) {
             e.sandwormState = 'TELEGRAPH_WARN';
             e.sandwormTimer = SANDWORM_TELEGRAPH_SEC;
+            out.sandwormEnteredWarn = true;
           }
         } else if (e.sandwormState === 'TELEGRAPH_WARN') {
           e.weakPointExposed = false;
@@ -547,6 +566,7 @@ export class CombatSystem {
             e.sandwormState = 'EMERGE_STRIKE';
             e.sandwormTimer = SANDWORM_EMERGE_SEC;
             e.weakPointExposed = true;
+            out.sandwormEnteredEmerge = true;
           }
         } else if (e.sandwormState === 'EMERGE_STRIKE') {
           e.weakPointExposed = true;
@@ -587,6 +607,9 @@ export class CombatSystem {
       }
 
       const targetable = !(e.kind === 'BOSS_SANDWORM' && e.sandwormState === 'SUBMERGE');
+      if (e.isBoss) {
+        out.hasActiveBoss = true;
+      }
       if (targetable) {
         if (!firstTarget) firstTarget = e;
         if (this.lockedEnemyId === e.id) lockedFound = e;
@@ -605,6 +628,7 @@ export class CombatSystem {
     if (chosenTarget && this.fireTimerSec <= 0) {
       this.fireTimerSec = turretSpec.cooldownSec;
       out.fired = true;
+      out.firedTurretId = params.equippedTurret;
 
       const isManual = lockedFound !== null && chosenTarget.id === this.lockedEnemyId;
       const aimX = isManual && this.lockedWeakPoint
@@ -704,6 +728,12 @@ export class CombatSystem {
     const applyToEnemy = (target: EnemyEntity, dmg: number) => {
       target.hp -= dmg;
       target.flashTimer = ENEMY_HIT_FLASH_SEC;
+      if (proj.isCrit || proj.isManual) {
+        out.enemyHitCrit = true;
+      }
+      if (proj.turretId === 'TUR_03') {
+        out.mortarExploded = true;
+      }
       if (target.isBoss && (proj.isManual || proj.isCrit)) {
         out.hitstopTriggered = true;
       }

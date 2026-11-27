@@ -27,6 +27,7 @@ import {
   type RewardedDecision,
   type RewardedPlacement,
 } from '@/systems/AdTierManager';
+import { DEFAULT_AUDIO_SETTINGS, type AudioSettingsState } from './audioManifest';
 
 export const SAVE_STORAGE_KEY_V2 = 'sandwalker_save_v2';
 export const SAVE_BACKUP_KEY_V2 = 'sandwalker_save_backup';
@@ -71,6 +72,7 @@ export interface SaveStateV2 {
     nextOasisDistance: number;
   };
   monetization: AdMonetizationState;
+  audioSettings: AudioSettingsState;
 }
 
 export function createInitialSaveStateV2(nowMs = Date.now()): SaveStateV2 {
@@ -124,6 +126,7 @@ export function createInitialSaveStateV2(nowMs = Date.now()): SaveStateV2 {
       totalInterstitialsShown: 0,
       totalRewardedWatched: 0,
     },
+    audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
   };
 }
 
@@ -330,6 +333,23 @@ export function loadSaveStateV2(storage?: Storage): {
             ? Math.max(0, Math.floor(mo.totalRewardedWatched))
             : 0,
       },
+      audioSettings: (() => {
+        const as = isPlainObject(parsed.audioSettings)
+          ? (parsed.audioSettings as Partial<AudioSettingsState>)
+          : {};
+        return {
+          bgmMuted: Boolean(as.bgmMuted),
+          sfxMuted: Boolean(as.sfxMuted),
+          bgmVolume:
+            typeof as.bgmVolume === 'number' && Number.isFinite(as.bgmVolume)
+              ? Math.min(1, Math.max(0, as.bgmVolume))
+              : DEFAULT_AUDIO_SETTINGS.bgmVolume,
+          sfxVolume:
+            typeof as.sfxVolume === 'number' && Number.isFinite(as.sfxVolume)
+              ? Math.min(1, Math.max(0, as.sfxVolume))
+              : DEFAULT_AUDIO_SETTINGS.sfxVolume,
+        };
+      })(),
     };
 
     return { state: hydrated, recoveredFromCorruption: false };
@@ -377,6 +397,7 @@ export interface GameStoreV2Actions {
   addPlayTimeForAd: (dtSec: number) => void;
   recordOasisSettlementForAd: (opts?: { isChapterBossCleared?: boolean }) => InterstitialDecision;
   recordRewardedAd: (placement: RewardedPlacement) => RewardedDecision;
+  setAudioSettings: (partial: Partial<AudioSettingsState>) => AudioSettingsState;
   resetAll: () => void;
 }
 
@@ -717,6 +738,24 @@ export const gameStore = createStore<GameStoreV2>((set, get) => ({
       },
     }));
     return decision;
+  },
+
+  setAudioSettings: (partial: Partial<AudioSettingsState>) => {
+    const prev = get().audioSettings;
+    const next: AudioSettingsState = {
+      bgmMuted: partial.bgmMuted !== undefined ? Boolean(partial.bgmMuted) : prev.bgmMuted,
+      sfxMuted: partial.sfxMuted !== undefined ? Boolean(partial.sfxMuted) : prev.sfxMuted,
+      bgmVolume:
+        partial.bgmVolume !== undefined
+          ? Math.min(1, Math.max(0, partial.bgmVolume))
+          : prev.bgmVolume,
+      sfxVolume:
+        partial.sfxVolume !== undefined
+          ? Math.min(1, Math.max(0, partial.sfxVolume))
+          : prev.sfxVolume,
+    };
+    set({ audioSettings: next });
+    return next;
   },
 
   resetAll: () => set(() => createInitialSaveStateV2()),

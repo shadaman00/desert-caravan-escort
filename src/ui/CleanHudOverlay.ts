@@ -14,6 +14,8 @@ import {
   toggleFullscreen,
 } from '@/core/fullscreen';
 import type { BiomeRenderState } from '@/systems/BiomeSystem';
+import type { AudioSettingsState } from '@/data/audioManifest';
+import { PauseAudioControls } from './PauseAudioControls';
 
 export interface CleanHudSnapshot {
   scene:
@@ -47,7 +49,7 @@ export interface CleanHudCallbacks {
   onDodgeOrParry: () => void;
   onActivateShield: () => void;
   onVentOverdrive: () => void;
-  onToggleMute: () => boolean;
+  onAudioSettingsChange: (next: AudioSettingsState) => void;
 }
 
 /**
@@ -71,7 +73,7 @@ export class CleanHudOverlay {
 
   private readonly titleOverlay: HTMLDivElement;
   private readonly pauseOverlay: HTMLDivElement;
-  public readonly muteBtn: HTMLButtonElement;
+  public readonly pauseAudioControls: PauseAudioControls;
   private readonly adToastEl: HTMLDivElement;
   private adToastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -238,16 +240,6 @@ export class CleanHudOverlay {
     resumeBtn.setAttribute('data-testid', 'btn-resume');
     resumeBtn.textContent = '▶ 원정 재개';
     resumeBtn.addEventListener('click', callbacks.onTogglePause);
-    const muteBtn = document.createElement('button');
-    muteBtn.type = 'button';
-    muteBtn.className = 'secondary-btn';
-    muteBtn.setAttribute('data-testid', 'btn-mute');
-    muteBtn.textContent = '🔊 효과음 ON';
-    muteBtn.addEventListener('click', () => {
-      const muted = callbacks.onToggleMute();
-      muteBtn.textContent = muted ? '🔇 효과음 OFF' : '🔊 효과음 ON';
-    });
-    this.muteBtn = muteBtn;
 
     const titleBtn = document.createElement('button');
     titleBtn.type = 'button';
@@ -255,7 +247,10 @@ export class CleanHudOverlay {
     titleBtn.setAttribute('data-testid', 'btn-reset-run');
     titleBtn.textContent = '↺ 타이틀로';
     titleBtn.addEventListener('click', callbacks.onResetToTitle);
-    pauseActions.append(resumeBtn, muteBtn, titleBtn);
+    pauseActions.append(resumeBtn, titleBtn);
+    this.pauseAudioControls = new PauseAudioControls(pauseCard, {
+      onChange: (next) => callbacks.onAudioSettingsChange(next),
+    });
     pauseCard.appendChild(pauseActions);
     pauseOverlay.appendChild(pauseCard);
     this.pauseOverlay = pauseOverlay;
@@ -382,6 +377,10 @@ export class CleanHudOverlay {
     this.titleOverlay.classList.toggle('hidden', snap.scene !== 'TITLE');
     this.pauseOverlay.classList.toggle('hidden', snap.scene !== 'PAUSED');
     this.pauseBtn.textContent = snap.scene === 'PAUSED' ? '▶' : '⏸';
+  }
+
+  public syncAudioSettings(settings: AudioSettingsState): void {
+    this.pauseAudioControls.syncSettings(settings);
   }
 
   public showAdToast(message: string): void {

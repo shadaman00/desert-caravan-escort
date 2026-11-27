@@ -25,9 +25,11 @@ import {
   persistSaveStateV2,
 } from '@/data/saveStore';
 import { AssetLoader, type AssetLoadSummary } from './AssetLoader';
+import { AudioManager, type AudioDebugSnapshot } from './AudioManager';
 import { InputManager } from './InputManager';
 import { ObjectPool } from './ObjectPool';
-import { SoundSynth, type SfxKey } from './SoundSynth';
+import type { SfxKey } from './SoundSynth';
+import type { AudioSettingsState, BgmId } from '@/data/audioManifest';
 import { toggleFullscreen } from './fullscreen';
 import { BiomeSystem, type BiomeRenderState } from '@/systems/BiomeSystem';
 import { MechControlSystem, computeMarchSpeed, type MechFsmState } from '@/systems/MechControlSystem';
@@ -124,7 +126,11 @@ export interface SandwalkerV2DebugHandle {
   setAdTier: (tier: AdTier) => void;
   addPlayTimeForAd: (sec: number) => void;
   evaluateDefeatAd: () => InterstitialDecision;
-  getAudioState: () => { muted: boolean; playCounts: Readonly<Record<SfxKey, number>> };
+  getAudioState: () => {
+    muted: boolean;
+    playCounts: Readonly<Record<SfxKey, number>>;
+  } & AudioDebugSnapshot;
+  triggerVisibilityForAudio: (hidden: boolean) => void;
   getFps: () => number;
 }
 
@@ -142,7 +148,7 @@ export class GameEngine {
   private readonly biomeSystem = new BiomeSystem();
   private readonly mechControl = new MechControlSystem();
   private readonly combatSystem = new CombatSystem();
-  private readonly soundSynth = new SoundSynth();
+  private readonly audioManager = new AudioManager();
   private readonly renderer: CanvasRenderer;
   private readonly overlay: CleanHudOverlay;
   private readonly inputManager: InputManager;
@@ -180,6 +186,7 @@ export class GameEngine {
   private currentFps = 60;
   private saveTimerSec = 0;
   private adTimerAccumSec = 0;
+  private hasActiveBossInCombat = false;
   private readonly cleanups: Array<() => void> = [];
 
   constructor(root: HTMLElement) {
@@ -213,28 +220,32 @@ export class GameEngine {
       onTogglePause: () => this.togglePause(),
       onResetToTitle: () => this.transitionScene('TITLE'),
       onCycleTurret: () => {
-        this.soundSynth.unlock();
+        void this.audioManager.unlockOnUserGesture();
         if (this.scene === 'EXPEDITION') {
           gameStore.getState().cycleTurret();
-          this.soundSynth.playTurretCycle();
+          this.audioManager.playSfx('sfx_turret_switch');
           this.syncHud();
         } else {
           this.inputManager.bufferAction('TURRET_CYCLE', INPUT_BUFFER_STANDARD_SEC);
         }
       },
       onDodgeOrParry: () => {
-        this.soundSynth.unlock();
+        void this.audioManager.unlockOnUserGesture();
         this.inputManager.bufferAction('DODGE_PARRY', INPUT_BUFFER_DODGE_SEC);
       },
       onActivateShield: () => {
-        this.soundSynth.unlock();
+        void this.audioManager.unlockOnUserGesture();
         this.inputManager.bufferAction('SHIELD_ACTIVE', INPUT_BUFFER_STANDARD_SEC);
       },
       onVentOverdrive: () => {
-        this.soundSynth.unlock();
+        void this.audioManager.unlockOnUserGesture();
         this.inputManager.bufferAction('VENT_OVERDRIVE', INPUT_BUFFER_STANDARD_SEC);
       },
-      onToggleMute: () => this.soundSynth.toggleMute(),
+      onAudioSettingsChange: (next: AudioSettingsState) => {
+        const applied = gameStore.getState().setAudioSettings(next);
+        this.audioManager.applySettings(applied);
+        persistSaveStateV2(gameStore.getState());
+      },
     });
 
     this.openingStoryboard = new OpeningStoryboard(
@@ -267,6 +278,23 @@ export class GameEngine {
       },
     });
 
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const unlockOnce = () => {
+        void this.audioManager.unlockOnUserGesture();
+      };
+      const onVisibility = () => {
+        this.audioManager.handleVisibilityChange(document.hidden);
+      };
+      window.addEventListener('pointerdown', unlockOnce, { passive: true });
+      window.addEventListener('keydown', unlockOnce, { passive: true });
+      document.addEventListener('visibilitychange', onVisibility);
+      this.cleanups.push(() => {
+        window.removeEventListener('pointerdown', unlockOnce);
+        window.removeEventListener('keydown', unlockOnce);
+        document.removeEventListener('visibilitychange', onVisibility);
+      });
+    }
+
     this.exposeDebugHandle();
   }
 
@@ -294,8 +322,15 @@ export class GameEngine {
     this.currentBiome = this.biomeSystem.evaluate(
       gameStore.getState().progression.currentDistanceMeters
     );
+    const savedAudio = gameStore.getState().audioSettings;
+    this.audioManager.applySettings(savedAudio);
+    this.overlay.syncAudioSettings(savedAudio);
+
     this.transitionScene('TITLE');
     this.startLoop();
+    void this.audioManager.preloadCategory('BGM');
+    void this.audioManager.preloadCategory('AMBIENCE');
+    void this.audioManager.preloadCategory('SFX');
     this.assetSummary = await this.assetLoader.preloadAll({ probeAssets: true });
     this.openingStoryboard.refreshVisual();
   }
@@ -311,13 +346,53 @@ export class GameEngine {
       this.eventChoiceModal.close();
       this.oasisCampModal.close();
       this.activeSpeechBubble = null;
+      this.hasActiveBossInCombat = false;
+      this.audioManager.setDucking(false);
     }
     this.scene = nextScene;
+    this.syncAudioEnvironment();
     this.syncHud();
   }
 
+  private syncAudioEnvironment(): void {
+    if (this.scene === 'TITLE' || this.scene === 'OPENING_STORYBOARD') {
+      this.audioManager.playBgm('bgm_title_opening');
+      this.audioManager.setAmbience('amb_desert_wind', 0);
+      this.audioManager.setAmbience('amb_quicksand_rumble', 0);
+      this.audioManager.setAmbience('amb_sandstorm_howl', 0);
+      return;
+    }
+
+    if (this.scene === 'OASIS_CAMP') {
+      this.audioManager.playBgm('bgm_oasis_camp');
+      this.audioManager.setAmbience('amb_desert_wind', 0.25);
+      this.audioManager.setAmbience('amb_quicksand_rumble', 0);
+      this.audioManager.setAmbience('amb_sandstorm_howl', 0);
+      return;
+    }
+
+    if (this.scene === 'EXPEDITION' || this.scene === 'EVENT_CHOICE') {
+      let targetBgm: BgmId = 'bgm_zone1_dunes';
+      if (this.hasActiveBossInCombat) {
+        targetBgm = 'bgm_boss_sandworm';
+      } else if (this.currentBiome.biomeIndex === 1) {
+        targetBgm = 'bgm_zone2_canyon';
+      } else if (this.currentBiome.biomeIndex === 2) {
+        targetBgm = 'bgm_zone3_storm';
+      }
+      this.audioManager.playBgm(targetBgm);
+
+      const stormIntensity = Math.min(1, Math.max(0, this.currentBiome.vignetteAlpha / 0.42));
+      const quicksandIntensity = this.currentBiome.quicksandPenalty > 0 ? 0.85 : 0;
+      const windIntensity = stormIntensity > 0.3 ? 0.35 : 0.65;
+      this.audioManager.setAmbience('amb_desert_wind', windIntensity);
+      this.audioManager.setAmbience('amb_quicksand_rumble', quicksandIntensity);
+      this.audioManager.setAmbience('amb_sandstorm_howl', stormIntensity);
+    }
+  }
+
   public startExpedition(): void {
-    this.soundSynth.unlock();
+    void this.audioManager.unlockOnUserGesture();
     const s = gameStore.getState();
     if (!s.meta.hasSeenOpeningStoryboard) {
       this.mechControl.setEventPause(true);
@@ -358,6 +433,8 @@ export class GameEngine {
     const s = gameStore.getState();
     const ev = getEventForDistance(distanceMeters, s.meta.seenEventIds);
     this.mechControl.setEventPause(true);
+    this.audioManager.setDucking(true);
+    this.audioManager.playSfx(ev.speaker === 'jafar' ? 'sfx_jafar_mirage' : 'sfx_event_popup');
     this.eventChoiceModal.open(ev, s.player.gold);
     this.transitionScene('EVENT_CHOICE');
   }
@@ -380,11 +457,11 @@ export class GameEngine {
     }
     if (resolution.triggerShieldFullCharge) {
       this.mechControl.fullChargeShield();
-      this.soundSynth.playShieldActivate();
+      this.audioManager.playSfx('sfx_solar_shield');
     }
     if (resolution.triggerOverdrive) {
       this.mechControl.triggerEventOverdrive();
-      this.soundSynth.playSteamVent();
+      this.audioManager.playSfx('sfx_overheat_vent');
     }
     if (resolution.moraleBonusSec > 0) {
       this.mechControl.applyMoraleBonus(resolution.moraleBonusSec);
@@ -394,6 +471,7 @@ export class GameEngine {
     }
     if (choice.isRewardedAd) {
       const rw = s.recordRewardedAd('JAFAR_EVENT_DEAL');
+      this.audioManager.playSfx('sfx_jafar_mirage');
       this.overlay.showAdToast(
         rw.instantPass
           ? '🐪 자파르 보상형 패스 적용 — 다음 교역 2배'
@@ -413,6 +491,7 @@ export class GameEngine {
     persistSaveStateV2(gameStore.getState());
 
     this.eventChoiceModal.close();
+    this.audioManager.setDucking(false);
     this.mechControl.setEventPause(false);
     this.transitionScene('EXPEDITION');
   }
@@ -456,7 +535,7 @@ export class GameEngine {
     const res = s.settleOasisTrade(this.currentBiome.biomeIndex, useJafarDouble);
     this.tradeSettledThisStop = true;
     this.lastSettledProfit = res.totalProfit;
-    this.soundSynth.playRelicExcavate();
+    this.audioManager.playSfx(useJafarDouble ? 'sfx_jafar_mirage' : 'sfx_trade_coins');
 
     const interDecision = s.recordOasisSettlementForAd({
       isChapterBossCleared: this.activeOasisStopMeters >= 2000,
@@ -473,6 +552,7 @@ export class GameEngine {
 
   private handleCampUpgrade(action: () => boolean): void {
     if (!action()) return;
+    this.audioManager.playSfx('sfx_upgrade_mech');
     persistSaveStateV2(gameStore.getState());
     this.refreshCampModal();
     this.syncHud();
@@ -600,6 +680,7 @@ export class GameEngine {
         this.currentBiome = this.biomeSystem.evaluate(
           gameStore.getState().progression.currentDistanceMeters
         );
+        this.syncAudioEnvironment();
         this.syncHud();
       },
       setScene: (nextScene: GameSceneId) => {
@@ -614,9 +695,11 @@ export class GameEngine {
       },
       spawnBoss: (kind: Exclude<EnemyKind, 'RAIDER'>, x = 660) => {
         const e = this.combatSystem.spawnEnemy(kind, x);
+        this.hasActiveBossInCombat = true;
         if (e && kind === 'BOSS_SANDWORM') {
           this.sandwormState = e.sandwormState;
         }
+        this.syncAudioEnvironment();
       },
       spawnRelic: (x = 460, gold = 85, gears = 1) => {
         this.combatSystem.spawnRelic(x, gold, gears);
@@ -641,10 +724,17 @@ export class GameEngine {
         gameStore.getState().addPlayTimeForAd(sec);
       },
       evaluateDefeatAd: () => shouldShowInterstitialOnDefeat(),
-      getAudioState: () => ({
-        muted: this.soundSynth.isMuted(),
-        playCounts: this.soundSynth.getPlayCounts(),
-      }),
+      getAudioState: () => {
+        const snap = this.audioManager.getDebugSnapshot();
+        return {
+          ...snap,
+          muted: gameStore.getState().audioSettings.sfxMuted,
+          playCounts: snap.legacyPlayCounts,
+        };
+      },
+      triggerVisibilityForAudio: (hidden: boolean) => {
+        this.audioManager.handleVisibilityChange(hidden);
+      },
       getFps: () => this.currentFps,
     };
   }
@@ -679,27 +769,27 @@ export class GameEngine {
     const s = gameStore.getState();
 
     if (this.inputManager.consumeAction('TURRET_0')) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       s.cycleTurret(TURRET_ORDER[0]);
-      this.soundSynth.playTurretCycle();
+      this.audioManager.playSfx('sfx_turret_switch');
     } else if (this.inputManager.consumeAction('TURRET_1')) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       s.cycleTurret(TURRET_ORDER[1]);
-      this.soundSynth.playTurretCycle();
+      this.audioManager.playSfx('sfx_turret_switch');
     } else if (this.inputManager.consumeAction('TURRET_2')) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       s.cycleTurret(TURRET_ORDER[2]);
-      this.soundSynth.playTurretCycle();
+      this.audioManager.playSfx('sfx_turret_switch');
     } else if (this.inputManager.consumeAction('TURRET_CYCLE')) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       s.cycleTurret();
-      this.soundSynth.playTurretCycle();
+      this.audioManager.playSfx('sfx_turret_switch');
     }
 
     if (this.inputManager.consumeAction('VENT_OVERDRIVE')) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       if (this.mechControl.tryVentOverdrive()) {
-        this.soundSynth.playSteamVent();
+        this.audioManager.playSfx('sfx_overheat_vent');
         this.combatSystem.spawnFloatingText(
           WALKER_ANCHOR_X,
           GROUND_Y - 142,
@@ -712,17 +802,17 @@ export class GameEngine {
     }
 
     if (this.inputManager.consumeAction('SHIELD_ACTIVE')) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       if (this.mechControl.tryActivateShield(s.sandwalker.shieldLevel)) {
-        this.soundSynth.playShieldActivate();
+        this.audioManager.playSfx('sfx_solar_shield');
       }
     }
 
     if (this.inputManager.consumeAction('EXCAVATE_NEAREST')) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       const exc = this.combatSystem.excavateNearestRelic();
       if (exc) {
-        this.soundSynth.playRelicExcavate();
+        this.audioManager.playSfx('sfx_relic_collect');
         s.addPlayerResources({ gold: exc.gold, ancientGears: exc.gears });
         if (s.progression.currentDistanceMeters >= 500) {
           s.unlockTurret('TUR_03');
@@ -732,12 +822,13 @@ export class GameEngine {
     }
 
     if (this.inputManager.consumeAction('DODGE_PARRY')) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       const tele = this.combatSystem.getBossTelegraphState();
       const parryRes = this.mechControl.tryDodgeOrParry(tele.active || this.bossTelegraphActive);
       if (parryRes.triggered) {
-        this.soundSynth.playGoldenParry();
+        this.audioManager.playSfx('sfx_golden_counter');
         if (parryRes.isGoldenCounter) {
+          this.audioManager.setDucking(false);
           const activeTurret = gameStore.getState().sandwalker.equippedTurret;
           const lv = gameStore.getState().sandwalker.turretLevels[activeTurret] ?? 1;
           const counter = this.combatSystem.triggerGoldenCounterBarrage(activeTurret, lv);
@@ -751,11 +842,11 @@ export class GameEngine {
 
     const tap = this.inputManager.consumeTap();
     if (tap) {
-      this.soundSynth.unlock();
+      void this.audioManager.unlockOnUserGesture();
       // 1. Touch Relic Excavation (28px hit tolerance)
       const relicHit = this.combatSystem.tryExcavateRelicAt(tap.x, tap.y);
       if (relicHit) {
-        this.soundSynth.playRelicExcavate();
+        this.audioManager.playSfx('sfx_relic_collect');
         s.addPlayerResources({ gold: relicHit.gold, ancientGears: relicHit.gears });
         if (s.progression.currentDistanceMeters >= 500) {
           s.unlockTurret('TUR_03');
@@ -771,7 +862,7 @@ export class GameEngine {
         tap.y <= GROUND_Y + 10
       ) {
         if (this.mechControl.tryVentOverdrive()) {
-          this.soundSynth.playSteamVent();
+          this.audioManager.playSfx('sfx_overheat_vent');
           this.combatSystem.spawnFloatingText(
             WALKER_ANCHOR_X,
             GROUND_Y - 142,
@@ -789,7 +880,7 @@ export class GameEngine {
       this.lockedEnemyId = lock.lockedEnemyId;
       this.lockedWeakPoint = lock.weakPoint;
       if (lock.lockedEnemyId !== null) {
-        this.soundSynth.playLockOn();
+        this.audioManager.playSfx('sfx_manual_lockon');
       }
     }
   }
@@ -872,12 +963,37 @@ export class GameEngine {
       this.triggerShake(combatOut.shakePx);
     }
 
+    if (combatOut.firedTurretId === 'TUR_01') {
+      this.audioManager.playSfx('sfx_turret_harpoon');
+    } else if (combatOut.firedTurretId === 'TUR_02') {
+      this.audioManager.playSfx('sfx_turret_laser');
+    } else if (combatOut.mortarExploded) {
+      this.audioManager.playSfx('sfx_turret_mortar');
+    }
+
+    if (combatOut.enemyHitCrit) {
+      this.audioManager.playSfx('sfx_enemy_hit_crit');
+    }
+    if (combatOut.sandwormEnteredWarn) {
+      this.audioManager.setDucking(true);
+      this.audioManager.playSfx('sfx_boss_telegraph');
+    }
+    if (combatOut.sandwormEnteredEmerge) {
+      this.audioManager.setDucking(false);
+      this.audioManager.playSfx('sfx_sandworm_emerge');
+    }
+    if (!combatOut.bossTelegraphActive && this.bossTelegraphActive) {
+      this.audioManager.setDucking(false);
+    }
+
+    this.hasActiveBossInCombat = combatOut.hasActiveBoss;
     this.bossTelegraphActive = combatOut.bossTelegraphActive;
     this.telegraphX = combatOut.telegraphX;
     this.sandwormState = combatOut.sandwormState;
     this.lockedEnemyId = combatOut.lockedEnemyId;
     this.lockedWeakPoint = combatOut.lockedWeakPoint;
     this.lastAimAngleRad = combatOut.aimAngleRad;
+    this.syncAudioEnvironment();
 
     // Pooled weather particles (zero heap allocation)
     const targetCount = this.currentBiome.stormParticleTarget;
@@ -999,7 +1115,7 @@ export class GameEngine {
       this.rafId = null;
     }
     this.inputManager.destroy();
-    this.soundSynth.destroy();
+    this.audioManager.destroy();
     this.particlePool.releaseAll();
     this.combatSystem.releaseAll();
     while (this.cleanups.length > 0) {
