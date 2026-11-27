@@ -1,5 +1,6 @@
 import {
   CAMERA_LERP_LAMBDA,
+  ENTITY_VISUAL_SPECS,
   GROUND_Y,
   HEAT_MAX,
   LAYER2_HEIGHT,
@@ -225,18 +226,23 @@ export class CanvasRenderer {
 
     // Glowing touchable battlefield relics with golden pulsing aura
     input.relicPool.forEachActive((r) => {
-      const pulse = 14 + Math.sin(r.pulsePhase) * 3;
+      const pulse = ENTITY_VISUAL_SPECS.relicPulseRadius + Math.sin(r.pulsePhase) * 4;
+      const rw = ENTITY_VISUAL_SPECS.relicWidth;
+      const rh = ENTITY_VISUAL_SPECS.relicHeight;
       ctx.save();
-      ctx.strokeStyle = 'rgba(253, 224, 71, 0.85)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.9)';
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(r.x, r.y, pulse, 0, Math.PI * 2);
       ctx.stroke();
 
       ctx.fillStyle = '#B7791F';
-      ctx.fillRect(r.x - 8, r.y - 7, 16, 14);
+      ctx.fillRect(r.x - rw * 0.5, r.y - rh * 0.5, rw, rh);
+      ctx.strokeStyle = '#3E2723';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(r.x - rw * 0.5, r.y - rh * 0.5, rw, rh);
       ctx.fillStyle = '#FEF08A';
-      ctx.fillRect(r.x - 6, r.y - 4, 12, 4);
+      ctx.fillRect(r.x - rw * 0.38, r.y - rh * 0.25, rw * 0.76, 6);
       ctx.restore();
     });
   }
@@ -273,29 +279,35 @@ export class CanvasRenderer {
     const wagonCount = Math.min(5, Math.max(1, input.wagonCount));
     const wagonImg = this.assetLoader.getImage('CAMEL_WAGON');
     const wheelAngle = input.scrollPx * 0.08;
+    const ww = ENTITY_VISUAL_SPECS.wagonWidth;
+    const wh = ENTITY_VISUAL_SPECS.wagonHeight;
 
     for (let i = wagonCount - 1; i >= 0; i--) {
-      const wx = WALKER_ANCHOR_X - 58 - i * WAGON_SPACING_PX;
-      const wy = GROUND_Y;
+      const wx = WALKER_ANCHOR_X - 216 - i * WAGON_SPACING_PX;
+      const wy = GROUND_Y - 2;
       if (wagonImg) {
-        ctx.drawImage(wagonImg, wx - 22, wy - 32, 44, 32);
+        ctx.drawImage(wagonImg, wx - ww * 0.5, wy - wh, ww, wh);
       } else {
         drawFallbackWagon(ctx, wx, wy, wheelAngle);
       }
     }
 
-    // Draw unlocked mercenaries accompanying the caravan
+    // Draw unlocked mercenaries in a staggered 2-row foreground escort formation
+    const drawH = ENTITY_VISUAL_SPECS.mercenaryHeight;
     let slotIdx = 0;
     for (let m = 0; m < MERCENARY_TABLE.length; m++) {
       const spec = MERCENARY_TABLE[m];
       if (!input.unlockedMercIds.includes(spec.id)) continue;
-      const mx = WALKER_ANCHOR_X - 38 - slotIdx * 24;
-      const my = GROUND_Y;
+      const mx = WALKER_ANCHOR_X - 84 - slotIdx * 34;
+      const my = GROUND_Y + (slotIdx % 2 === 0 ? 6 : 14);
       const mercKey = MERC_ASSET_KEYS[spec.id];
       const mercImg = mercKey ? this.assetLoader.getImage(mercKey) : null;
       if (mercImg) {
-        const bobY = Math.sin(input.walkPhase + slotIdx) * 1.5;
-        ctx.drawImage(mercImg, mx - 13, my - 34 + bobY, 26, 34);
+        const bobY = Math.sin(input.walkPhase + slotIdx) * 2.2;
+        const aspect =
+          mercImg.naturalHeight > 0 ? mercImg.naturalWidth / mercImg.naturalHeight : 0.85;
+        const drawW = Math.round(drawH * aspect);
+        ctx.drawImage(mercImg, mx - drawW * 0.5, my - drawH + bobY, drawW, drawH);
       } else {
         drawFallbackMercenary(ctx, mx, my, spec.colorHex, input.walkPhase + slotIdx);
       }
@@ -307,9 +319,11 @@ export class CanvasRenderer {
     const wx = WALKER_ANCHOR_X - this.cameraOffsetX * 0.1;
     const wy = GROUND_Y;
     const bodyImg = this.assetLoader.getImage('SANDWALKER_BODY');
+    const sw = ENTITY_VISUAL_SPECS.sandwalkerWidth;
+    const sh = ENTITY_VISUAL_SPECS.sandwalkerHeight;
 
     if (bodyImg) {
-      ctx.drawImage(bodyImg, wx - 36, wy - 48, 72, 48);
+      ctx.drawImage(bodyImg, wx - sw * 0.5, wy - sh, sw, sh);
     } else {
       drawFallbackSandwalker(
         ctx,
@@ -328,24 +342,28 @@ export class CanvasRenderer {
           ? 'TURRET_LASER'
           : 'TURRET_MORTAR';
     const turretImg = this.assetLoader.getImage(turretKey);
-    const turretX = wx + 4;
-    const turretY = wy - 50;
+    const turretX = wx + 10;
+    const turretY = wy - 114;
 
     if (turretImg) {
+      const th = ENTITY_VISUAL_SPECS.turretHeights[input.equippedTurret];
+      const aspect =
+        turretImg.naturalHeight > 0 ? turretImg.naturalWidth / turretImg.naturalHeight : 1.95;
+      const tw = Math.round(th * aspect);
       ctx.save();
       ctx.translate(turretX, turretY);
       ctx.rotate(Math.max(-0.45, Math.min(0.45, input.aimAngleRad)));
-      ctx.drawImage(turretImg, -9, -7, 32, 14);
+      ctx.drawImage(turretImg, -tw * 0.3, -th * 0.5, tw, th);
       ctx.restore();
     } else {
       drawFallbackTurret(ctx, turretX, turretY, input.equippedTurret, input.aimAngleRad);
     }
 
     // Overheat Gauge Bar directly above Sandwalker (PRD Section 4.2 Layer 50)
-    const barW = 54;
-    const barH = 6;
+    const barW = 92;
+    const barH = 7;
     const bx = wx - barW / 2;
-    const by = wy - 68;
+    const by = wy - 144;
     ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
     ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
     const fillRatio = Math.max(0, Math.min(1, input.heatValue / HEAT_MAX));
@@ -365,7 +383,7 @@ export class CanvasRenderer {
         ctx.save();
         ctx.fillStyle = '#78350F';
         ctx.beginPath();
-        ctx.ellipse(e.x, GROUND_Y, 44, 10, 0, Math.PI, 0);
+        ctx.ellipse(e.x, GROUND_Y, 82, 18, 0, Math.PI, 0);
         ctx.fill();
         ctx.restore();
         return;
@@ -381,7 +399,12 @@ export class CanvasRenderer {
               : 'ENEMY_RAIDER';
       const spriteImg = this.assetLoader.getImage(key);
       if (spriteImg && !flashWhite) {
-        ctx.drawImage(spriteImg, e.x - e.width * 0.5, e.y - e.height, e.width, e.height);
+        const aspect =
+          spriteImg.naturalHeight > 0
+            ? spriteImg.naturalWidth / spriteImg.naturalHeight
+            : e.width / e.height;
+        const drawW = Math.round(e.height * aspect);
+        ctx.drawImage(spriteImg, e.x - drawW * 0.5, e.y - e.height, drawW, e.height);
       } else if (e.kind === 'RAIDER') {
         drawFallbackRaider(ctx, e.x, e.y, flashWhite);
       } else {
@@ -389,10 +412,10 @@ export class CanvasRenderer {
       }
 
       // Enemy / Boss HP Bar
-      const barW = e.isBoss ? 86 : 30;
-      const barH = e.isBoss ? 6 : 4;
+      const barW = e.isBoss ? 136 : 56;
+      const barH = e.isBoss ? 7 : 5;
       const bx = e.x - barW * 0.5;
-      const by = e.y - e.height - 12;
+      const by = Math.max(8, e.y - e.height - 14);
       ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
       ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
       ctx.fillStyle = e.isBoss && e.sandwormState === 'COUNTERED_STUN' ? '#FDE047' : '#EF4444';
@@ -404,13 +427,13 @@ export class CanvasRenderer {
         const ry = input.lockedWeakPoint ? e.y + e.weakPointOffsetY : e.y - e.height * 0.5;
         ctx.save();
         ctx.strokeStyle = '#FF3B30';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.arc(rx, ry, 18, 0, Math.PI * 2);
-        ctx.moveTo(rx - 22, ry);
-        ctx.lineTo(rx + 22, ry);
-        ctx.moveTo(rx, ry - 22);
-        ctx.lineTo(rx, ry + 22);
+        ctx.arc(rx, ry, 28, 0, Math.PI * 2);
+        ctx.moveTo(rx - 34, ry);
+        ctx.lineTo(rx + 34, ry);
+        ctx.moveTo(rx, ry - 34);
+        ctx.lineTo(rx, ry + 34);
         ctx.stroke();
         ctx.restore();
       }
@@ -422,10 +445,10 @@ export class CanvasRenderer {
       ctx.save();
       ctx.fillStyle = p.color;
       if (p.turretId === 'TUR_02') {
-        ctx.fillRect(p.x - 10, p.y - 2, 20, 4);
+        ctx.fillRect(p.x - 15, p.y - 2.5, 30, 5);
       } else {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.turretId === 'TUR_03' ? 5 : 3.5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.turretId === 'TUR_03' ? 7.5 : 5.5, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -435,9 +458,15 @@ export class CanvasRenderer {
     ctx.save();
     ctx.strokeStyle = '#38BDF8';
     ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(WALKER_ANCHOR_X, GROUND_Y - 26, 48, 0, Math.PI * 2);
+    ctx.arc(
+      WALKER_ANCHOR_X,
+      GROUND_Y + ENTITY_VISUAL_SPECS.shieldCenterOffsetY,
+      ENTITY_VISUAL_SPECS.shieldRadiusPx,
+      0,
+      Math.PI * 2
+    );
     ctx.fill();
     ctx.stroke();
     ctx.restore();
@@ -491,7 +520,7 @@ export class CanvasRenderer {
       const boxW = Math.min(340, Math.max(150, metrics.width + 24));
       const boxH = 30;
       const bx = Math.max(12, WALKER_ANCHOR_X - boxW * 0.35);
-      const by = GROUND_Y - 116;
+      const by = Math.max(12, GROUND_Y - 190);
 
       ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
       ctx.strokeStyle = bubble.colorHex;

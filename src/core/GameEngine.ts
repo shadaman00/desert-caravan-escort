@@ -702,7 +702,7 @@ export class GameEngine {
         this.soundSynth.playSteamVent();
         this.combatSystem.spawnFloatingText(
           WALKER_ANCHOR_X,
-          GROUND_Y - 82,
+          GROUND_Y - 142,
           'OVERDRIVE!',
           '#00E5FF',
           true,
@@ -766,15 +766,15 @@ export class GameEngine {
 
       // 2. Touch Sandwalker Hull -> Overheat Vent Overdrive (75 <= H <= 95)
       if (
-        Math.abs(tap.x - WALKER_ANCHOR_X) <= 46 &&
-        tap.y >= GROUND_Y - 64 &&
-        tap.y <= GROUND_Y + 8
+        Math.abs(tap.x - WALKER_ANCHOR_X) <= 92 &&
+        tap.y >= GROUND_Y - 128 &&
+        tap.y <= GROUND_Y + 10
       ) {
         if (this.mechControl.tryVentOverdrive()) {
           this.soundSynth.playSteamVent();
           this.combatSystem.spawnFloatingText(
             WALKER_ANCHOR_X,
-            GROUND_Y - 82,
+            GROUND_Y - 142,
             'STEAM VENT!',
             '#00E5FF',
             true,

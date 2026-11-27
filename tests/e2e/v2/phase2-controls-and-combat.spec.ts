@@ -63,25 +63,25 @@ test.describe('Phase 2 (PRD v2.0 Landscape): 4 Active Controls & Sandworm FSM', 
     await page.goto('/');
     await startAndSkipStoryboard(page);
 
-    // Spawn raider at x=640 (grounded at y=330, center y=313) & click to lock on
+    // Spawn raider at x=640 (grounded at y=348, height=82 -> center y=307) & click to lock on
     await page.evaluate(() => {
       (window as unknown as { __SANDWALKER_V2__: { spawnRaider: (x: number) => void } })
         .__SANDWALKER_V2__.spawnRaider(640);
     });
-    await page.locator('[data-testid="game-canvas"]').click({ position: { x: 640, y: 313 } });
+    await page.locator('[data-testid="game-canvas"]').click({ position: { x: 640, y: 307 } });
 
     await expect
       .poll(async () => (await readDebug(page)).combat.lockedEnemyId, { timeout: 3000 })
       .not.toBeNull();
 
-    // Spawn glowing relic at x=420 (y=318), click inside 28px hit radius -> gold +85, gear +1
+    // Spawn glowing relic at x=420 (y=328), click inside 28px hit radius -> gold +85, gear +1
     const beforeGold = (await readDebug(page)).snap.gold;
     const beforeGears = (await readDebug(page)).snap.ancientGears;
     await page.evaluate(() => {
       (window as unknown as { __SANDWALKER_V2__: { spawnRelic: (x: number, g: number, gear: number) => void } })
         .__SANDWALKER_V2__.spawnRelic(420, 85, 1);
     });
-    await page.locator('[data-testid="game-canvas"]').click({ position: { x: 420, y: 318 } });
+    await page.locator('[data-testid="game-canvas"]').click({ position: { x: 420, y: 328 } });
 
     await expect
       .poll(async () => (await readDebug(page)).snap.gold, { timeout: 3000 })
@@ -119,8 +119,8 @@ test.describe('Phase 2 (PRD v2.0 Landscape): 4 Active Controls & Sandworm FSM', 
 
     await expect(page.locator('[data-testid="hud-heat-hint"]')).toHaveClass(/sweet-spot/);
 
-    // Tap Sandwalker hull directly at (268, 305)
-    await page.locator('[data-testid="game-canvas"]').click({ position: { x: 268, y: 305 } });
+    // Tap Sandwalker hull directly at (340, 292)
+    await page.locator('[data-testid="game-canvas"]').click({ position: { x: 340, y: 292 } });
 
     await expect
       .poll(async () => (await readDebug(page)).combat.isOverdrive, { timeout: 3000 })

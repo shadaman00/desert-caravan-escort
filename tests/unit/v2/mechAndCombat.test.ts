@@ -8,7 +8,13 @@ import {
   checkCircle,
   computeShotDamage,
 } from '@/systems/CombatSystem';
-import { SANDWORM_SUBMERGE_SEC, SANDWORM_TELEGRAPH_SEC } from '@/data/masterData';
+import {
+  ENEMY_BASE_SPECS,
+  ENTITY_VISUAL_SPECS,
+  GROUND_Y,
+  SANDWORM_SUBMERGE_SEC,
+  SANDWORM_TELEGRAPH_SEC,
+} from '@/data/masterData';
 
 describe('Phase 2 (v2.0): 4 Active Controls, Combat Math, Overheat & Sandworm 4-Stage FSM', () => {
   let mech: MechControlSystem;
@@ -153,6 +159,19 @@ describe('Phase 2 (v2.0): 4 Active Controls, Combat Math, Overheat & Sandworm 4-
     });
     expect(worm2.sandwormState).toBe('EMERGE_STRIKE');
     expect(worm2.weakPointExposed).toBe(true);
+  });
+
+  it('enforces resolution-optimized differential visual scale specs within Layer 2 headroom', () => {
+    expect(ENTITY_VISUAL_SPECS.mercenaryHeight).toBe(84);
+    expect(ENTITY_VISUAL_SPECS.sandwalkerWidth).toBe(176);
+    expect(ENTITY_VISUAL_SPECS.sandwalkerHeight).toBe(110);
+    expect(ENTITY_VISUAL_SPECS.wagonWidth).toBe(118);
+    expect(ENTITY_VISUAL_SPECS.wagonHeight).toBe(88);
+    expect(ENEMY_BASE_SPECS.RAIDER.width).toBe(100);
+    expect(ENEMY_BASE_SPECS.RAIDER.height).toBe(82);
+    expect(ENEMY_BASE_SPECS.BOSS_SANDWORM.width).toBe(198);
+    expect(ENEMY_BASE_SPECS.BOSS_SANDWORM.height).toBe(260);
+    expect(ENEMY_BASE_SPECS.BOSS_SANDWORM.height).toBeLessThan(GROUND_Y);
   });
 
   it('enforces SRP: MechControlSystem and CombatSystem contain zero DOM/Canvas references', () => {

@@ -171,7 +171,7 @@ test.describe('Phase 4 (PRD v2.0 Landscape): 23 PNG Assets, AdTierManager & Web 
       (window as unknown as { __SANDWALKER_V2__: { spawnRaider: (x: number) => void } })
         .__SANDWALKER_V2__.spawnRaider(640);
     });
-    await page.locator('[data-testid="game-canvas"]').click({ position: { x: 640, y: 313 } });
+    await page.locator('[data-testid="game-canvas"]').click({ position: { x: 640, y: 307 } });
 
     // 3. Relic Excavate SFX
     await page.evaluate(() => {

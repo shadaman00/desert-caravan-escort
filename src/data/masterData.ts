@@ -10,9 +10,37 @@ export const LAYER1_HEIGHT = 56; // Top HUD (10.4%): Y in [0, 56)
 export const LAYER2_HEIGHT = 404; // Battlefield Canvas (74.8%): Y in [56, 460)
 export const LAYER3_HEIGHT = 80; // Bottom 3-Button Zone (14.8%): Y in [460, 540]
 
-export const WALKER_ANCHOR_X = 268; // 28% of 960px landscape width
-export const GROUND_Y = 330; // Ground baseline inside 960x404 Layer 2 canvas
-export const WAGON_SPACING_PX = 44; // Space between trailing camel wagons
+export const WALKER_ANCHOR_X = 340; // ~35.4% of 960px landscape width (room for enlarged caravan & mercs)
+export const GROUND_Y = 348; // Ground baseline inside 960x404 Layer 2 canvas (348px headroom for 260px boss)
+export const WAGON_SPACING_PX = 60; // Space between enlarged trailing camel wagons
+
+export const ENTITY_VISUAL_SPECS = {
+  mercenaryHeight: 84, // 2.47x
+  mercenaryFallbackScale: 2.47,
+  wagonWidth: 118, // 2.75x (1.33 ratio)
+  wagonHeight: 88,
+  wagonFallbackScale: 2.75,
+  sandwalkerWidth: 176, // 2.30x (1.59 ratio)
+  sandwalkerHeight: 110,
+  sandwalkerFallbackScale: 2.3,
+  turretHeights: {
+    TUR_01: 34,
+    TUR_02: 34,
+    TUR_03: 36,
+  } as Record<'TUR_01' | 'TUR_02' | 'TUR_03', number>,
+  turretFallbackScale: 2.35,
+  relicWidth: 32,
+  relicHeight: 28,
+  relicPulseRadius: 24,
+  shieldRadiusPx: 104,
+  shieldCenterOffsetY: -58,
+  enemyFallbackScales: {
+    RAIDER: 2.41,
+    BOSS_SCORPION: 2.1,
+    BOSS_MIRAGE: 2.0,
+    BOSS_SANDWORM: 1.85,
+  } as Record<'RAIDER' | 'BOSS_SCORPION' | 'BOSS_MIRAGE' | 'BOSS_SANDWORM', number>,
+} as const;
 
 export const MAX_DT_SEC = 0.05;
 export const HITSTOP_DURATION_SEC = 0.05;
@@ -295,22 +323,22 @@ export interface AssetManifestEntry {
 }
 
 export const ASSET_MANIFEST: readonly AssetManifestEntry[] = [
-  { key: 'CHAR_KASIM', path: 'assets/characters/kasim.png', width: 24, height: 32, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'CHAR_HARUN', path: 'assets/characters/harun.png', width: 24, height: 32, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'CHAR_TAREK', path: 'assets/characters/tarek.png', width: 24, height: 32, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'CHAR_SERA', path: 'assets/characters/sera.png', width: 24, height: 32, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'CHAR_ZARA', path: 'assets/characters/zara.png', width: 24, height: 32, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'CHAR_LILI', path: 'assets/characters/lili.png', width: 24, height: 32, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'CHAR_JAFAR', path: 'assets/characters/jafar.png', width: 28, height: 36, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'SANDWALKER_BODY', path: 'assets/mech/sandwalker_body.png', width: 72, height: 48, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'TURRET_HARPOON', path: 'assets/mech/turret_harpoon.png', width: 32, height: 12, pivotX: 0.3, pivotY: 0.5 },
-  { key: 'TURRET_LASER', path: 'assets/mech/turret_laser.png', width: 28, height: 14, pivotX: 0.3, pivotY: 0.5 },
-  { key: 'TURRET_MORTAR', path: 'assets/mech/turret_mortar.png', width: 26, height: 18, pivotX: 0.3, pivotY: 0.5 },
-  { key: 'CAMEL_WAGON', path: 'assets/mech/camel_wagon.png', width: 44, height: 32, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'ENEMY_RAIDER', path: 'assets/enemies/sand_raider.png', width: 28, height: 34, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'BOSS_SCORPION', path: 'assets/enemies/scorpion_rex.png', width: 84, height: 64, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'BOSS_MIRAGE', path: 'assets/enemies/mirage_king.png', width: 76, height: 92, pivotX: 0.5, pivotY: 1.0 },
-  { key: 'BOSS_SANDWORM', path: 'assets/enemies/apophis_sandworm.png', width: 110, height: 140, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'CHAR_KASIM', path: 'assets/characters/kasim.png', width: 67, height: 84, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'CHAR_HARUN', path: 'assets/characters/harun.png', width: 67, height: 84, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'CHAR_TAREK', path: 'assets/characters/tarek.png', width: 79, height: 84, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'CHAR_SERA', path: 'assets/characters/sera.png', width: 67, height: 84, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'CHAR_ZARA', path: 'assets/characters/zara.png', width: 84, height: 84, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'CHAR_LILI', path: 'assets/characters/lili.png', width: 84, height: 84, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'CHAR_JAFAR', path: 'assets/characters/jafar.png', width: 84, height: 84, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'SANDWALKER_BODY', path: 'assets/mech/sandwalker_body.png', width: 176, height: 110, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'TURRET_HARPOON', path: 'assets/mech/turret_harpoon.png', width: 72, height: 34, pivotX: 0.3, pivotY: 0.5 },
+  { key: 'TURRET_LASER', path: 'assets/mech/turret_laser.png', width: 66, height: 34, pivotX: 0.3, pivotY: 0.5 },
+  { key: 'TURRET_MORTAR', path: 'assets/mech/turret_mortar.png', width: 62, height: 36, pivotX: 0.3, pivotY: 0.5 },
+  { key: 'CAMEL_WAGON', path: 'assets/mech/camel_wagon.png', width: 118, height: 88, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'ENEMY_RAIDER', path: 'assets/enemies/sand_raider.png', width: 100, height: 82, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'BOSS_SCORPION', path: 'assets/enemies/scorpion_rex.png', width: 176, height: 134, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'BOSS_MIRAGE', path: 'assets/enemies/mirage_king.png', width: 172, height: 184, pivotX: 0.5, pivotY: 1.0 },
+  { key: 'BOSS_SANDWORM', path: 'assets/enemies/apophis_sandworm.png', width: 198, height: 260, pivotX: 0.5, pivotY: 1.0 },
   { key: 'BIOME_ZONE1', path: 'assets/biomes/zone1_dunes.png', width: 960, height: 404, pivotX: 0, pivotY: 0 },
   { key: 'BIOME_ZONE2', path: 'assets/biomes/zone2_canyon.png', width: 960, height: 404, pivotX: 0, pivotY: 0 },
   { key: 'BIOME_ZONE3', path: 'assets/biomes/zone3_storm.png', width: 960, height: 404, pivotX: 0, pivotY: 0 },
@@ -381,9 +409,9 @@ export const ENEMY_BASE_SPECS: Record<EnemyKind, EnemyBaseSpec> = {
     archetypeTag: 'RAIDER',
     maxHp: 110,
     defense: 2,
-    width: 28,
-    height: 34,
-    radius: 20,
+    width: 100,
+    height: 82,
+    radius: 44,
     speedPxPerSec: 46,
     rewardGold: 28,
     rewardGears: 0,
@@ -394,9 +422,9 @@ export const ENEMY_BASE_SPECS: Record<EnemyKind, EnemyBaseSpec> = {
     archetypeTag: 'BOSS_SCORPION',
     maxHp: 950,
     defense: 8,
-    width: 84,
-    height: 64,
-    radius: 44,
+    width: 176,
+    height: 134,
+    radius: 74,
     speedPxPerSec: 18,
     rewardGold: 180,
     rewardGears: 3,
@@ -407,9 +435,9 @@ export const ENEMY_BASE_SPECS: Record<EnemyKind, EnemyBaseSpec> = {
     archetypeTag: 'BOSS_MIRAGE',
     maxHp: 1350,
     defense: 6,
-    width: 76,
-    height: 92,
-    radius: 46,
+    width: 172,
+    height: 184,
+    radius: 84,
     speedPxPerSec: 14,
     rewardGold: 260,
     rewardGears: 4,
@@ -420,9 +448,9 @@ export const ENEMY_BASE_SPECS: Record<EnemyKind, EnemyBaseSpec> = {
     archetypeTag: 'BOSS_SANDWORM',
     maxHp: 2200,
     defense: 10,
-    width: 110,
-    height: 140,
-    radius: 58,
+    width: 198,
+    height: 260,
+    radius: 100,
     speedPxPerSec: 36,
     rewardGold: 500,
     rewardGears: 8,

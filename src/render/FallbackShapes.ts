@@ -1,4 +1,14 @@
-import { FALLBACK_HEX_COLORS, type TurretId } from '@/data/masterData';
+import {
+  ENTITY_VISUAL_SPECS,
+  FALLBACK_HEX_COLORS,
+  type TurretId,
+} from '@/data/masterData';
+
+function applyAnchorScale(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.translate(-x, -y);
+}
 
 /**
  * Geometric Placeholder Renderer (PRD Section 4.3).
@@ -14,6 +24,7 @@ export function drawFallbackSandwalker(
   isOverdrive: boolean
 ): void {
   ctx.save();
+  applyAnchorScale(ctx, x, y, ENTITY_VISUAL_SPECS.sandwalkerFallbackScale);
 
   // 6 animated sine-wave legs (#3E2723) anchored below hull
   ctx.strokeStyle = FALLBACK_HEX_COLORS.SANDWALKER_LEGS;
@@ -87,6 +98,7 @@ export function drawFallbackTurret(
 ): void {
   ctx.save();
   ctx.translate(x, y);
+  ctx.scale(ENTITY_VISUAL_SPECS.turretFallbackScale, ENTITY_VISUAL_SPECS.turretFallbackScale);
   ctx.rotate(aimAngleRad);
 
   if (turretId === 'TUR_01') {
@@ -131,6 +143,7 @@ export function drawFallbackWagon(
   wheelAngle: number
 ): void {
   ctx.save();
+  applyAnchorScale(ctx, x, y, ENTITY_VISUAL_SPECS.wagonFallbackScale);
 
   // Lead camel silhouette pulling slightly ahead (+20px)
   ctx.fillStyle = '#C68B59';
@@ -194,8 +207,9 @@ export function drawFallbackMercenary(
   colorHex: string,
   bobPhase: number
 ): void {
-  const by = y + Math.sin(bobPhase) * 1.5;
+  const by = y + Math.sin(bobPhase) * 2.2;
   ctx.save();
+  applyAnchorScale(ctx, x, by, ENTITY_VISUAL_SPECS.mercenaryFallbackScale);
   ctx.fillStyle = colorHex;
   ctx.strokeStyle = '#1E293B';
   ctx.lineWidth = 1.5;
@@ -215,6 +229,7 @@ export function drawFallbackRaider(
   flashWhite = false
 ): void {
   ctx.save();
+  applyAnchorScale(ctx, x, y, ENTITY_VISUAL_SPECS.enemyFallbackScales.RAIDER);
   ctx.fillStyle = flashWhite ? '#FFFFFF' : FALLBACK_HEX_COLORS.ENEMY_RAIDER_CLOAK;
   ctx.beginPath();
   ctx.moveTo(x, y - 34);
@@ -238,6 +253,7 @@ export function drawFallbackBoss(
   flashWhite = false
 ): void {
   ctx.save();
+  applyAnchorScale(ctx, x, y, ENTITY_VISUAL_SPECS.enemyFallbackScales[bossKey]);
   if (bossKey === 'BOSS_SCORPION') {
     ctx.fillStyle = flashWhite ? '#FFFFFF' : FALLBACK_HEX_COLORS.BOSS_SCORPION_BODY;
     ctx.beginPath();

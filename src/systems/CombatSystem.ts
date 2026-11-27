@@ -218,17 +218,17 @@ export class CombatSystem {
         isBoss: false,
         x: 0,
         y: GROUND_Y,
-        width: 28,
-        height: 34,
-        radius: 20,
+        width: 100,
+        height: 82,
+        radius: 44,
         hp: 0,
         maxHp: 1,
         defense: 0,
         flashTimer: 0,
         sandwormState: 'EMERGE_STRIKE',
         sandwormTimer: 0,
-        weakPointOffsetX: -14,
-        weakPointOffsetY: -92,
+        weakPointOffsetX: -26,
+        weakPointOffsetY: -170,
         weakPointExposed: false,
         rewardGold: 0,
         rewardGears: 0,
@@ -294,7 +294,7 @@ export class CombatSystem {
       () => ({
         active: false,
         x: 0,
-        y: GROUND_Y - 12,
+        y: GROUND_Y - 20,
         goldReward: 85,
         gearReward: 1,
         pulsePhase: 0,
@@ -339,8 +339,8 @@ export class CombatSystem {
     if (kind === 'BOSS_SANDWORM') {
       e.sandwormState = 'SUBMERGE';
       e.sandwormTimer = SANDWORM_SUBMERGE_SEC;
-      e.weakPointOffsetX = -14;
-      e.weakPointOffsetY = -92;
+      e.weakPointOffsetX = -26;
+      e.weakPointOffsetY = -170;
       e.weakPointExposed = false;
     } else {
       e.sandwormState = 'EMERGE_STRIKE';
@@ -356,7 +356,7 @@ export class CombatSystem {
     const r = this.relicPool.acquire();
     if (!r) return null;
     r.x = x;
-    r.y = GROUND_Y - 12;
+    r.y = GROUND_Y - 20;
     r.goldReward = goldReward;
     r.gearReward = gearReward;
     r.pulsePhase = 0;
@@ -366,7 +366,7 @@ export class CombatSystem {
   public tryExcavateRelicAt(x: number, y: number): { gold: number; gears: number } | null {
     let found: RelicEntity | null = null;
     this.relicPool.forEachActive((r) => {
-      if (!found && checkCircle(x, y, TOUCH_HIT_RADIUS_PX, r.x, r.y, 12)) {
+      if (!found && checkCircle(x, y, TOUCH_HIT_RADIUS_PX, r.x, r.y, 18)) {
         found = r;
       }
     });
@@ -404,7 +404,7 @@ export class CombatSystem {
       if (e.kind === 'BOSS_SANDWORM' && e.sandwormState === 'SUBMERGE') return;
       const wpX = e.x + e.weakPointOffsetX;
       const wpY = e.y + e.weakPointOffsetY;
-      if (e.weakPointExposed && checkCircle(x, y, TOUCH_HIT_RADIUS_PX, wpX, wpY, 16)) {
+      if (e.weakPointExposed && checkCircle(x, y, TOUCH_HIT_RADIUS_PX, wpX, wpY, 26)) {
         best = e;
         isWeakPoint = true;
         return;
@@ -569,7 +569,7 @@ export class CombatSystem {
           out.telegraphX = e.x;
         }
       } else {
-        const stopX = e.isBoss ? 680 : WALKER_ANCHOR_X + 180;
+        const stopX = e.isBoss ? 730 : WALKER_ANCHOR_X + 230;
         if (e.x > stopX) {
           e.x = Math.max(stopX, e.x - ENEMY_BASE_SPECS[e.kind].speedPxPerSec * dt);
         }
@@ -614,8 +614,8 @@ export class CombatSystem {
         ? chosenTarget.y + chosenTarget.weakPointOffsetY
         : chosenTarget.y - chosenTarget.height * 0.5;
 
-      const startX = WALKER_ANCHOR_X + 16;
-      const startY = GROUND_Y - 50;
+      const startX = WALKER_ANCHOR_X + 42;
+      const startY = GROUND_Y - 114;
       const dx = aimX - startX;
       const dy = aimY - startY;
       this.aimAngleRad = Math.atan2(dy, Math.max(20, dx));
@@ -713,7 +713,7 @@ export class CombatSystem {
       );
       this.spawnFloatingText(
         target.x,
-        target.y - target.height - 6,
+        Math.max(18, target.y - target.height - 10),
         `${dmg}${proj.isCrit ? '!' : ''}`,
         proj.isManual ? '#FF5252' : proj.isCrit ? '#FDE047' : '#FFFFFF',
         proj.isManual,
